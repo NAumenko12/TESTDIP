@@ -21,16 +21,18 @@ namespace TESTDIP;
 
 public partial class MainWindow : Window
 {
-    private readonly PointLatLng ReferencePoint = new PointLatLng(67.911564, 32.838848);
+    private readonly PointLatLng ReferencePoint = new PointLatLng(67.923840, 32.840962);
     private readonly List<GMapPolygon> _pollutionPolygons = new List<GMapPolygon>();
     private readonly DatabaseHelper _dbHelper = new DatabaseHelper();
-   
+    private GMapMarker _plantMarker; 
+
     public MainWindow()
     {
         InitializeComponent();
         InitializeMap();
         LoadLocations();
         LoadMetalsComboBox();
+        AddPlantMarker(); 
     }
 
     private void InitializeMap()
@@ -43,6 +45,24 @@ public partial class MainWindow : Window
         MapControl.MouseWheelZoomType = MouseWheelZoomType.MousePositionAndCenter;
         MapControl.CanDragMap = true;
         MapControl.MouseDown += MapControl_MouseDown;
+    }
+
+    private void AddPlantMarker()
+    {
+        
+        _plantMarker = new GMapMarker(ReferencePoint)
+        {
+            Shape = new Image
+            {
+                Source = new BitmapImage(new Uri("C:\\Users\\natac\\source\\repos\\TESTDIP\\TESTDIP\\recources\\zavod.ico")),
+                Width = 32,
+                Height = 32,
+                ToolTip = "Комбинат"
+            },
+            Offset = new System.Windows.Point(-16, -16) 
+        };
+
+        MapControl.Markers.Add(_plantMarker);
     }
 
     public void LoadLocations()
@@ -67,19 +87,33 @@ public partial class MainWindow : Window
 
         MetalComboBox.SelectedIndex = 0;
     }
+
     private void UpdateMap(List<Location> locations)
     {
+        
+        var plantMarker = MapControl.Markers.FirstOrDefault(m => m == _plantMarker);
+
+        
         var markersToKeep = MapControl.Markers.OfType<GMapPolygon>().ToList();
         MapControl.Markers.Clear();
+
+        
         foreach (var polygon in markersToKeep)
         {
             MapControl.Markers.Add(polygon);
         }
+
+        if (plantMarker != null)
+        {
+            MapControl.Markers.Add(plantMarker);
+        }
+
+        
         foreach (var location in locations)
         {
             double distance = CalculateDistance(ReferencePoint, new PointLatLng(location.Latitude, location.Longitude));
-            Brush markerColor = distance <= 3 ? Brushes.Red :
-                              distance <= 6 ? Brushes.Orange :
+            Brush markerColor = distance <= 10 ? Brushes.Red :
+                              distance <= 40 ? Brushes.Orange :
                               Brushes.Green;
 
             var marker = new GMapMarker(new PointLatLng(location.Latitude, location.Longitude))

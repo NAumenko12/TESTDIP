@@ -9,6 +9,17 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Новая папка1\**" />
+    <Compile Remove="Новая папка2\**" />
+    <EmbeddedResource Remove="Новая папка1\**" />
+    <EmbeddedResource Remove="Новая папка2\**" />
+    <None Remove="Новая папка1\**" />
+    <None Remove="Новая папка2\**" />
+    <Page Remove="Новая папка1\**" />
+    <Page Remove="Новая папка2\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="GMap.NET.Core" Version="2.1.7" />
     <PackageReference Include="GMap.NET.WinPresentation" Version="2.1.7" />
     <PackageReference Include="LiveCharts" Version="0.9.7" />
