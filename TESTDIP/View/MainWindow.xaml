@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:TESTDIP" xmlns:gmap="clr-namespace:GMap.NET.WindowsPresentation;assembly=GMap.NET.WindowsPresentation"
         mc:Ignorable="d"
-        Title="MainWindow" Height="950" Width="1600">
+         Height="950" Width="1600">
     <Grid>
 
         <Grid.ColumnDefinitions>
