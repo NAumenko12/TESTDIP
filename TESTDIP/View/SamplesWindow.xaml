@@ -1,0 +1,44 @@
+﻿<Window x:Class="TESTDIP.SamplesWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:TESTDIP"
+        mc:Ignorable="d"
+        Title="SamplesWindow" Height="450" Width="800">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Шапка с информацией о локации -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="10">
+            <TextBlock Text="Локация: " FontWeight="Bold"/>
+            <TextBlock Text="{Binding LocationName}" Margin="5,0,0,0"/>
+            <TextBlock Text="Номер площадки: " FontWeight="Bold" Margin="10,0,0,0"/>
+            <TextBlock Text="{Binding LocationSiteNumber}" Margin="5,0,0,0"/>
+        </StackPanel>
+
+        <DataGrid Grid.Row="1" Margin="10" AutoGenerateColumns="False" 
+                  ItemsSource="{Binding Samples}" SelectionMode="Single">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Металл" Binding="{Binding Metal.Name}" Width="100"/>
+                <DataGridTextColumn Header="Значение" Binding="{Binding Value}" Width="100"/>
+                <DataGridTextColumn Header="Ед. изм." Binding="{Binding Metal.Unit}" Width="80"/>
+                <DataGridTextColumn Header="Дата отбора" Binding="{Binding SamplingDate, StringFormat={}{0:dd.MM.yyyy}}" Width="100"/>
+                <DataGridTextColumn Header="Номер аналитики" Binding="{Binding AnalyticsNumber}" Width="120"/>
+                <DataGridTextColumn Header="Вид" Binding="{Binding Type}" Width="100"/>
+                <DataGridTextColumn Header="Фракция" Binding="{Binding Fraction}" Width="100"/>
+                <DataGridTextColumn Header="Повторность" Binding="{Binding Repetition}" Width="80"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- Панель кнопок -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="10">
+            <Button Content="Добавить пробу" Width="120" Margin="0,0,10,0" Click="AddSample_Click"/>
+            <Button Content="Закрыть" Width="80" Click="Close_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

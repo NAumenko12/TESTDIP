@@ -16,17 +16,13 @@
         <StackPanel Grid.Column="1" Orientation="Vertical" Margin="10" VerticalAlignment="Top">
             <ComboBox x:Name="YearComboBox" Width="150" Margin="0,0,0,10" SelectedIndex="0">
                 <ComboBoxItem>Выбор года</ComboBoxItem>
-                <ComboBoxItem>2021</ComboBoxItem>
-                <ComboBoxItem>2022</ComboBoxItem>
-                <ComboBoxItem>2023</ComboBoxItem>
             </ComboBox>
             <ComboBox x:Name="MetalComboBox" Width="150" Margin="0,0,0,10" SelectedIndex="0">
                 <ComboBoxItem>Выбор металла</ComboBoxItem>
-                <ComboBoxItem>Gold</ComboBoxItem>
-                <ComboBoxItem>Silver</ComboBoxItem>
-                <ComboBoxItem>Copper</ComboBoxItem>
             </ComboBox>
             <Button x:Name="AddPointButton" Content="Добавить точку" Width="150" Margin="0,0,0,10" Click="AddPointButton_Click"/>
+            <CheckBox x:Name="ShowPollutionFieldCheckBox" Content="Отрисовать поля распространения" Width="221" Margin="0,0,0,10" Checked="ShowPollutionFieldCheckBox_Changed" Unchecked="ShowPollutionFieldCheckBox_Changed" Height="36"/>
+            <Button x:Name="GoToStatsButton" Content="Перейти к статистике" Width="150" Margin="0,0,0,10" Click="GoToStatsButton_Click"/>
         </StackPanel>
     </Grid>
 </Window>
