@@ -15,6 +15,7 @@ using TESTDIP.Model;
 using Location = TESTDIP.Model.Location;
 using TESTDIP.DataBase;
 using TESTDIP.View;
+using System.IO;
 
 namespace TESTDIP;
 
@@ -234,7 +235,7 @@ public partial class MainWindow : Window
         points.Add(points[0]); 
         var polygon = new GMapPolygon(points)
         {
-            Shape = new Path
+            Shape = new System.Windows.Shapes.Path
             {
                 Data = CreatePathGeometry(points),
                 Fill = new SolidColorBrush(zoneColor),
@@ -268,6 +269,49 @@ public partial class MainWindow : Window
         var statsWindow = new StatisticsWindow();
 
         statsWindow.Show();
+    }
+    private void ExportButton_Click(object sender, RoutedEventArgs e)
+    {
+        var saveFileDialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Filter = "PNG Image|*.png|JPEG Image|*.jpg",
+            Title = "Сохранить карту как изображение"
+        };
+
+        if (saveFileDialog.ShowDialog() == true)
+        {
+            try
+            {
+                // Создаем RenderTargetBitmap для рендеринга карты
+                var renderBitmap = new RenderTargetBitmap(
+                    (int)MapControl.ActualWidth,
+                    (int)MapControl.ActualHeight,
+                    96d, 96d, PixelFormats.Pbgra32);
+
+                renderBitmap.Render(MapControl);
+
+                // Выбираем кодировщик в зависимости от выбранного формата
+                BitmapEncoder encoder;
+                if (saveFileDialog.FilterIndex == 1)
+                    encoder = new PngBitmapEncoder();
+                else
+                    encoder = new JpegBitmapEncoder();
+
+                encoder.Frames.Add(BitmapFrame.Create(renderBitmap));
+
+                // Сохраняем файл
+                using (var fileStream = new FileStream(saveFileDialog.FileName, FileMode.Create))
+                {
+                    encoder.Save(fileStream);
+                }
+
+                MessageBox.Show("Карта успешно экспортирована!", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка при экспорте карты: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
     }
     private void ClearPollutionFields()
     {

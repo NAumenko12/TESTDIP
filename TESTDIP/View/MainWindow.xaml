@@ -23,6 +23,7 @@
             <Button x:Name="AddPointButton" Content="Добавить точку" Width="150" Margin="0,0,0,10" Click="AddPointButton_Click"/>
             <CheckBox x:Name="ShowPollutionFieldCheckBox" Content="Отрисовать поля распространения" Width="221" Margin="0,0,0,10" Checked="ShowPollutionFieldCheckBox_Changed" Unchecked="ShowPollutionFieldCheckBox_Changed" Height="36"/>
             <Button x:Name="GoToStatsButton" Content="Перейти к статистике" Width="150" Margin="0,0,0,10" Click="GoToStatsButton_Click"/>
+            <Button x:Name="ExportButton" Content="Экспорт карты" Width="150" Margin="0,0,0,10" Click="ExportButton_Click"/>
         </StackPanel>
     </Grid>
 </Window>

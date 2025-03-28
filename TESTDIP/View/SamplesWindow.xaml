@@ -9,6 +9,7 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
@@ -21,8 +22,21 @@
             <TextBlock Text="{Binding LocationSiteNumber}" Margin="5,0,0,0"/>
         </StackPanel>
 
-        <DataGrid Grid.Row="1" Margin="10" AutoGenerateColumns="False" 
-                  ItemsSource="{Binding Samples}" SelectionMode="Single">
+        <!-- Панель фильтров -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="10" VerticalAlignment="Center">
+            <TextBlock Text="Фильтр по металлу:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+            <ComboBox x:Name="MetalFilterComboBox" Width="150" Margin="0,0,20,0"
+                  DisplayMemberPath="Name" SelectedValuePath="Id"
+                  SelectionChanged="Filter_SelectionChanged"/>
+
+            <TextBlock Text="Фильтр по году:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+            <ComboBox x:Name="YearFilterComboBox" Width="100" Margin="0,0,20,0"
+                  SelectionChanged="Filter_SelectionChanged"/>
+        </StackPanel>
+
+        <!-- Таблица с пробами -->
+        <DataGrid Grid.Row="2" Margin="10" AutoGenerateColumns="False" 
+              ItemsSource="{Binding FilteredSamples}" SelectionMode="Single">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Металл" Binding="{Binding Metal.Name}" Width="100"/>
                 <DataGridTextColumn Header="Значение" Binding="{Binding Value}" Width="100"/>
@@ -36,7 +50,7 @@
         </DataGrid>
 
         <!-- Панель кнопок -->
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="10">
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="10">
             <Button Content="Добавить пробу" Width="120" Margin="0,0,10,0" Click="AddSample_Click"/>
             <Button Content="Закрыть" Width="80" Click="Close_Click"/>
         </StackPanel>
