@@ -16,6 +16,7 @@ using Location = TESTDIP.Model.Location;
 using TESTDIP.DataBase;
 using TESTDIP.View;
 using System.IO;
+using TESTDIP.ViewModel;
 
 namespace TESTDIP;
 
@@ -25,7 +26,7 @@ public partial class MainWindow : Window
     private readonly PointLatLng ReferencePoint = new PointLatLng(67.923840, 32.840962);
     private readonly List<GMapPolygon> _pollutionPolygons = new List<GMapPolygon>();
     private readonly DatabaseHelper _dbHelper = new DatabaseHelper();
-    private GMapMarker _plantMarker; 
+    private GMapMarker _plantMarker;
 
     public MainWindow()
     {
@@ -33,7 +34,7 @@ public partial class MainWindow : Window
         InitializeMap();
         LoadLocations();
         LoadMetalsComboBox();
-        AddPlantMarker(); 
+        AddPlantMarker();
     }
 
     private void InitializeMap()
@@ -50,7 +51,7 @@ public partial class MainWindow : Window
 
     private void AddPlantMarker()
     {
-        
+
         _plantMarker = new GMapMarker(ReferencePoint)
         {
             Shape = new Image
@@ -60,7 +61,7 @@ public partial class MainWindow : Window
                 Height = 32,
                 ToolTip = "Комбинат"
             },
-            Offset = new System.Windows.Point(-16, -16) 
+            Offset = new System.Windows.Point(-16, -16)
         };
 
         MapControl.Markers.Add(_plantMarker);
@@ -91,37 +92,29 @@ public partial class MainWindow : Window
 
     private void UpdateMap(List<Location> locations)
     {
-        
         var plantMarker = MapControl.Markers.FirstOrDefault(m => m == _plantMarker);
-
-        
         var markersToKeep = MapControl.Markers.OfType<GMapPolygon>().ToList();
+
         MapControl.Markers.Clear();
 
-        
+        // Восстанавливаем полигоны и маркер завода
         foreach (var polygon in markersToKeep)
         {
             MapControl.Markers.Add(polygon);
         }
-
         if (plantMarker != null)
         {
             MapControl.Markers.Add(plantMarker);
         }
 
-        
+        // Добавляем маркеры локаций (без изменений во внешнем виде)
         foreach (var location in locations)
         {
-            double distance = CalculateDistance(ReferencePoint, new PointLatLng(location.Latitude, location.Longitude));
-            Brush markerColor = distance <= 10 ? Brushes.Red :
-                              distance <= 40 ? Brushes.Orange :
-                              Brushes.Green;
-
             var marker = new GMapMarker(new PointLatLng(location.Latitude, location.Longitude))
             {
                 Shape = new System.Windows.Shapes.Ellipse
                 {
-                    Fill = markerColor,
+                    Fill = GetDistanceColor(location),
                     Width = 10,
                     Height = 10,
                     Stroke = Brushes.Black,
@@ -130,9 +123,23 @@ public partial class MainWindow : Window
                 Tag = location
             };
 
+            // Добавляем ToolTip с названием
+            ToolTipService.SetToolTip(marker.Shape, location.SiteNumber);
+
             MapControl.Markers.Add(marker);
         }
+
         MapControl.ZoomAndCenterMarkers(null);
+    }
+
+    private Brush GetDistanceColor(Location location)
+    {
+        double distance = CalculateDistance(ReferencePoint,
+            new PointLatLng(location.Latitude, location.Longitude));
+
+        return distance <= 10 ? Brushes.Red :
+               distance <= 40 ? Brushes.Orange :
+               Brushes.Green;
     }
     private void MapControl_MouseDown(object sender, MouseButtonEventArgs e)
     {
@@ -188,87 +195,271 @@ public partial class MainWindow : Window
     {
         return degrees * Math.PI / 180;
     }
-    private void ShowPollutionFieldCheckBox_Changed(object sender, RoutedEventArgs e)
+    private readonly List<GMapPolygon> _concentrationPolygons = new List<GMapPolygon>();
+
+    private void CalculateButton_Click(object sender, RoutedEventArgs e)
     {
-        if (ShowPollutionFieldCheckBox.IsChecked == true)
+        try
         {
-            DrawPollutionFields();
+            var dialog = new CalculateDialog(_dbHelper, ReferencePoint);
+            if (dialog.ShowDialog() == true)
+            {
+                // Проверяем, что все необходимые данные выбраны
+                if (dialog.SelectedLocation == null)
+                {
+                    MessageBox.Show("Не выбрана опорная точка");
+                    return;
+                }
+
+                if (dialog.SelectedMetal == null)
+                {
+                    MessageBox.Show("Не выбран металл");
+                    return;
+                }
+
+                CalculateAndDrawPollutionField(
+                    dialog.SelectedLocation,
+                    dialog.SelectedMetal,
+                    dialog.SelectedYear);
+            }
         }
-        else
+        catch (Exception ex)
         {
-            ClearPollutionFields();
+            MessageBox.Show($"Ошибка при открытии диалога расчета: {ex.Message}");
         }
     }
 
-    private void DrawPollutionFields()
+
+    private void CalculateAndDrawPollutionField(Location referencePoint, Metal metal, int year)
     {
-        ClearPollutionFields();
-        var redZone = CreatePollutionZone(ReferencePoint, 10, Color.FromArgb(80, 255, 0, 0));     // Красная зона (0-10 км)
-        var orangeZone = CreatePollutionZone(ReferencePoint, 30, Color.FromArgb(80, 255, 165, 0)); // Оранжевая зона (10-30 км)
-        var greenZone = CreatePollutionZone(ReferencePoint, 50, Color.FromArgb(80, 0, 255, 0));    // Зеленая зона (30-50 км)
+        try
+        {
+            // Проверяем входные параметры
+            if (referencePoint == null)
+            {
+                MessageBox.Show("Не выбрана опорная точка");
+                return;
+            }
 
-        
-        MapControl.Markers.Add(redZone);
-        MapControl.Markers.Add(orangeZone);
-        MapControl.Markers.Add(greenZone);
+            if (metal == null)
+            {
+                MessageBox.Show("Не выбран металл");
+                return;
+            }
 
-        _pollutionPolygons.Add(redZone);
-        _pollutionPolygons.Add(orangeZone);
-        _pollutionPolygons.Add(greenZone);
+            // Очищаем предыдущие полигоны
+            ClearConcentrationFields();
 
-        MapControl.Position = ReferencePoint;
-        MapControl.Zoom = 9;
+            // Создаем экземпляр калькулятора
+            var calculator = new ConcentrationCalculator(_dbHelper);
+
+            // Получаем сетку с концентрациями
+            var grid = calculator.CalculateField(
+                ReferencePoint,
+                referencePoint,
+                metal,
+                year,
+                gridStepKm: 0.7,
+                areaSizeKm: 200.0);
+
+            // Проверка на null перед проверкой Count
+            if (grid == null || grid.Count == 0)
+            {
+                MessageBox.Show("Нет данных для построения поля. Проверьте:\n" +
+                              "1. Наличие данных для выбранного года и металла\n" +
+                              "2. Корректность опорной точки");
+                return;
+            }
+
+            // Уровни концентрации для изолиний
+            var levels = new[] { 0.1, 0.5, 1.0, 2.0, 5.0 };
+
+            // Создаем полигоны для каждого уровня
+            foreach (var level in levels)
+            {
+                var contourPoints = FindContourPoints(grid, level);
+                if (contourPoints != null && contourPoints.Count > 2)
+                {
+                    var polygon = CreateContourPolygon(contourPoints, GetColorForLevel(level), level);
+                    _concentrationPolygons.Add(polygon);
+                    MapControl.Markers.Add(polygon);
+                }
+            }
+
+            // Центрируем карту на области загрязнения
+            ZoomToPollutionArea(grid);
+
+            // Показываем легенду
+            ShowLegendAlternative(levels);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Ошибка при построении поля: {ex.Message}\n\nСтек вызовов: {ex.StackTrace}");
+        }
     }
 
-    private GMapPolygon CreatePollutionZone(PointLatLng centerPoint, double radiusKm, Color zoneColor)
-    {
-        var points = new List<PointLatLng>();
-        int segments = 72; 
 
-        for (int i = 0; i < segments; i++)
+    private static List<PointLatLng> FindContourPoints(List<GridPoint> grid, double targetLevel)
+    {
+        var contourPoints = new List<PointLatLng>();
+
+        try
         {
-            double angle = 2 * Math.PI * i / segments;
-            double lat = centerPoint.Lat + (radiusKm / 111.32) * Math.Cos(angle);
-            double lng = centerPoint.Lng + (radiusKm / (111.32 * Math.Cos(centerPoint.Lat * Math.PI / 180))) * Math.Sin(angle);
-            points.Add(new PointLatLng(lat, lng));
+            // Проверка на null
+            if (grid == null || grid.Count == 0)
+            {
+                return contourPoints;
+            }
+
+            // Простой алгоритм - берем точки, близкие к целевому уровню
+            var closePoints = grid
+                .Where(p => p != null && Math.Abs(p.Concentration - targetLevel) < targetLevel * 0.5)
+                .OrderBy(p => Math.Abs(p.Concentration - targetLevel))
+                .Take(100)
+                .ToList();
+
+            if (closePoints.Count < 3) return contourPoints;
+
+            // Сортируем точки по углу относительно центра
+            var centerLat = closePoints.Average(p => p.Lat);
+            var centerLon = closePoints.Average(p => p.Lon);
+
+            return closePoints
+                .OrderBy(p => Math.Atan2(p.Lat - centerLat, p.Lon - centerLon))
+                .Select(p => new PointLatLng(p.Lat, p.Lon))
+                .ToList();
         }
-        points.Add(points[0]); 
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Ошибка при поиске контурных точек: {ex.Message}");
+            return contourPoints;
+        }
+    }
+
+    private GMapPolygon CreateContourPolygon(List<PointLatLng> points, Color color, double level)
+    {
         var polygon = new GMapPolygon(points)
         {
             Shape = new System.Windows.Shapes.Path
             {
-                Data = CreatePathGeometry(points),
-                Fill = new SolidColorBrush(zoneColor),
-                Stroke = new SolidColorBrush(Color.FromArgb(150, zoneColor.R, zoneColor.G, zoneColor.B)),
-                StrokeThickness = 1,
-                Opacity = 0.5
-            }
+                Stroke = new SolidColorBrush(color),
+                StrokeThickness = 2,
+                Fill = new SolidColorBrush(Color.FromArgb(80, color.R, color.G, color.B)),
+                ToolTip = $"Уровень {level:0.0} мг/м³"
+            },
+            Tag = level
         };
+
         return polygon;
     }
 
-    private System.Windows.Media.Geometry CreatePathGeometry(List<PointLatLng> points)
+    private void ZoomToPollutionArea(List<GridPoint> grid)
     {
-        var geometry = new PathGeometry();
-        var figure = new PathFigure();
-        if (points.Count == 0) return geometry;
-        var firstPoint = MapControl.FromLatLngToLocal(points[0]);
-        figure.StartPoint = new System.Windows.Point(firstPoint.X, firstPoint.Y);
-        for (int i = 1; i < points.Count; i++)
-        {
-            var gPoint = MapControl.FromLatLngToLocal(points[i]);
-            figure.Segments.Add(new LineSegment(new System.Windows.Point(gPoint.X, gPoint.Y), true));
-        }
-        geometry.Figures.Add(figure);
-        return geometry;
+        if (grid.Count == 0) return;
+
+        double minLat = grid.Min(p => p.Lat);
+        double maxLat = grid.Max(p => p.Lat);
+        double minLon = grid.Min(p => p.Lon);
+        double maxLon = grid.Max(p => p.Lon);
+
+        var rect = new RectLatLng(maxLat, minLon, maxLon - minLon, maxLat - minLat);
+        MapControl.SetZoomToFitRect(rect);
     }
 
+    private void ShowLegendAlternative(double[] levels)
+    {
+        LegendGrid.Children.Clear();
+
+        var legendPanel = new StackPanel
+        {
+            Orientation = Orientation.Vertical,
+            Background = new SolidColorBrush(Colors.White),
+            Margin = new Thickness(10),
+            Opacity = 0.9
+        };
+
+        // Заголовок
+        legendPanel.Children.Add(new TextBlock
+        {
+            Text = "Концентрация (мг/м³)",
+            FontWeight = FontWeights.Bold,
+            Margin = new Thickness(0, 0, 0, 5)
+        });
+
+        // Элементы
+        foreach (var level in levels.OrderByDescending(l => l))
+        {
+            var stack = new StackPanel { Orientation = Orientation.Horizontal };
+
+            stack.Children.Add(new Rectangle
+            {
+                Width = 20,
+                Height = 10,
+                Fill = new SolidColorBrush(GetColorForLevel(level)),
+                Margin = new Thickness(0, 0, 5, 0)
+            });
+
+            stack.Children.Add(new TextBlock
+            {
+                Text = level.ToString("0.00"),
+                VerticalAlignment = VerticalAlignment.Center
+            });
+
+            legendPanel.Children.Add(stack);
+        }
+
+        // Добавляем границу для красоты
+        var border = new Border
+        {
+            BorderBrush = new SolidColorBrush(Colors.Black),
+            BorderThickness = new Thickness(1),
+            Child = legendPanel
+        };
+
+        LegendGrid.Children.Add(border);
+    }
+
+    private Color GetColorForLevel(double level)
+    {
+        double ratio = Math.Min(level / 5.0, 1.0);
+        return Color.FromRgb(
+            (byte)(255 * ratio),
+            (byte)(255 * (1 - ratio)),
+            0);
+    }
+
+    private void ClearConcentrationFields()
+    {
+        foreach (var poly in _concentrationPolygons)
+        {
+            MapControl.Markers.Remove(poly);
+        }
+        _concentrationPolygons.Clear();
+
+        // Очищаем легенду
+        LegendGrid.Children.Clear();
+    }
 
     private void GoToStatsButton_Click(object sender, RoutedEventArgs e)
     {
         var statsWindow = new StatisticsWindow();
 
         statsWindow.Show();
+    }
+    private void ResetButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            // Очищаем полигоны концентрации
+            ClearConcentrationFields();
+
+            // Сбрасываем легенду
+            LegendGrid.Children.Clear();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Ошибка при сбросе: {ex.Message}");
+        }
     }
     private void ExportButton_Click(object sender, RoutedEventArgs e)
     {
@@ -313,13 +504,5 @@ public partial class MainWindow : Window
             }
         }
     }
-    private void ClearPollutionFields()
-    {
-        foreach (var polygon in _pollutionPolygons)
-        {
-            MapControl.Markers.Remove(polygon);
-        }
-        _pollutionPolygons.Clear();
-    }
+   
 }
-

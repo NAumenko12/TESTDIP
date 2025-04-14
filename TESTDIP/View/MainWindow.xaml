@@ -13,7 +13,12 @@
             <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
         <gmap:GMapControl x:Name="MapControl" Grid.Column="0" />
-        <StackPanel Grid.Column="1" Orientation="Vertical" Margin="10" VerticalAlignment="Top">
+        <Grid x:Name="LegendGrid" 
+          HorizontalAlignment="Left" 
+          VerticalAlignment="Top"
+          Margin="10"
+          Panel.ZIndex="1000"/>
+        <StackPanel Grid.Column="1" Orientation="Vertical" Margin="10,10,10,0" VerticalAlignment="Top">
             <ComboBox x:Name="YearComboBox" Width="150" Margin="0,0,0,10" SelectedIndex="0">
                 <ComboBoxItem>Выбор года</ComboBoxItem>
             </ComboBox>
@@ -21,9 +26,12 @@
                 <ComboBoxItem>Выбор металла</ComboBoxItem>
             </ComboBox>
             <Button x:Name="AddPointButton" Content="Добавить точку" Width="150" Margin="0,0,0,10" Click="AddPointButton_Click"/>
-            <CheckBox x:Name="ShowPollutionFieldCheckBox" Content="Отрисовать поля распространения" Width="221" Margin="0,0,0,10" Checked="ShowPollutionFieldCheckBox_Changed" Unchecked="ShowPollutionFieldCheckBox_Changed" Height="36"/>
+            
             <Button x:Name="GoToStatsButton" Content="Перейти к статистике" Width="150" Margin="0,0,0,10" Click="GoToStatsButton_Click"/>
             <Button x:Name="ExportButton" Content="Экспорт карты" Width="150" Margin="0,0,0,10" Click="ExportButton_Click"/>
+            <Button x:Name="CalculateButton" Content="Рассчитать" Width="150" Margin="0,0,0,10" Click="CalculateButton_Click" />
+            <Button x:Name="ResetButton" Content="Сбросить отрисовку" Click="ResetButton_Click" Margin="5"/>
         </StackPanel>
+        
     </Grid>
 </Window>

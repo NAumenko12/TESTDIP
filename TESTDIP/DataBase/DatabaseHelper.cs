@@ -1,9 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.SqlClient;
 using System.Data.SQLite;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows;
 using TESTDIP.Model;
 
 namespace TESTDIP.DataBase
@@ -100,6 +103,8 @@ namespace TESTDIP.DataBase
 
             return samples;
         }
+
+
         public int AddSample(Sample sample)
         {
             using (var connection = new SQLiteConnection(_connectionString))
@@ -126,7 +131,7 @@ namespace TESTDIP.DataBase
                 }
             }
         }
-       
+
         public Sample GetSampleById(int sampleId)
         {
             using (var connection = new SQLiteConnection(_connectionString))
@@ -159,7 +164,7 @@ namespace TESTDIP.DataBase
                                 Type = !reader.IsDBNull(3) ? reader.GetString(3) : null,
                                 Fraction = !reader.IsDBNull(4) ? reader.GetString(4) : null,
                                 Repetition = !reader.IsDBNull(5) ? reader.GetInt32(5) : (int?)null,
-                                Value = reader.GetString(6) ,
+                                Value = reader.GetString(6),
                                 SamplingDate = DateTime.Parse(reader.GetString(7)),
                                 AnalyticsNumber = reader.GetString(8),
                                 Metal = new Metal
@@ -277,5 +282,182 @@ namespace TESTDIP.DataBase
 
             return metals;
         }
+        public List<Metal> GetMetalsForLocation(int locationId)
+        {
+            var metals = new List<Metal>();
+            using (var conn = new SQLiteConnection(_connectionString))
+            {
+                conn.Open();
+                var cmd = new SQLiteCommand(@"
+            SELECT DISTINCT m.ID, m.Название, m.Обозначение, m.ед_изм 
+            FROM Металлы m
+            JOIN Пробы p ON m.ID = p.FK_Металла
+            WHERE p.FK_Локации = @locId",
+                    conn);
+
+                cmd.Parameters.AddWithValue("@locId", locationId);
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        // Чтение данных металла
+                        metals.Add(new Metal
+                        {
+                            Id = reader.GetInt32(0),
+                            Name = reader.GetString(1),
+                            Symbol = reader.GetString(2),
+                            Unit = reader.GetString(3)
+                        });
+                    }
+                }
+            }
+            return metals;
+        }
+        
+        public List<Location> GetLocationss()
+        {
+            var locations = new List<Location>();
+            using (var conn = new SQLiteConnection(_connectionString))
+            {
+                conn.Open();
+                var cmd = new SQLiteCommand("SELECT ID, широта, долгота FROM Локации", conn);
+                using (var reader = cmd.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        try
+                        {
+                            var loc = new Location
+                            {
+                                Id = reader.GetInt32(0),
+                                Latitude = ParseCoordinate(reader.GetString(1)), // Парсинг широты
+                                Longitude = ParseCoordinate(reader.GetString(2)) // Парсинг долготы
+                            };
+                            locations.Add(loc);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Ошибка чтения локации ID {reader.GetInt32(0)}: {ex.Message}");
+                        }
+                    }
+                }
+            }
+            return locations;
+        }
+
+        private double ParseCoordinate(string value)
+        {
+            // Замена запятых на точки и удаление пробелов
+            var normalized = value.Replace(",", ".").Trim();
+            if (double.TryParse(normalized, NumberStyles.Any, CultureInfo.InvariantCulture, out double result))
+            {
+                return result;
+            }
+            throw new FormatException($"Некорректный формат координаты: {value}");
+        }
+
+        public List<int> GetYearsForLocation(int locationId)
+        {
+            var years = new HashSet<int>();
+            using (var conn = new SQLiteConnection(_connectionString))
+            {
+                conn.Open();
+                var cmd = new SQLiteCommand(
+                    @"SELECT Дата_отбора FROM Пробы WHERE FK_Локации = @locId",
+                    conn);
+                cmd.Parameters.AddWithValue("@locId", locationId);
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        if (reader.IsDBNull(0)) continue;
+
+                        var dateStr = reader.GetString(0);
+                        if (DateTime.TryParseExact(dateStr, "dd.MM.yyyy",
+                            CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime date))
+                        {
+                            years.Add(date.Year);
+                        }
+                        else
+                        {
+                            Console.WriteLine($"Некорректный формат даты: {dateStr}");
+                        }
+                    }
+                }
+            }
+            return years.OrderBy(y => y).ToList();
+        }
+
+        public double? GetMetalConcentration(int locationId, int metalId, int year)
+        {
+            try
+            {
+                using (var conn = new SQLiteConnection(_connectionString))
+                {
+                    conn.Open();
+                    var cmd = new SQLiteCommand(
+                        @"SELECT Значение 
+                FROM Пробы 
+                WHERE 
+                    FK_Локации = @locId 
+                    AND FK_Металла = @metalId 
+                    AND SUBSTR(Дата_отбора, 7, 4) = @year",
+                        conn);
+
+                    // Передаем параметры
+                    cmd.Parameters.AddWithValue("@locId", locationId);
+                    cmd.Parameters.AddWithValue("@metalId", metalId);
+                    cmd.Parameters.AddWithValue("@year", year.ToString()); // Год как строка!
+
+                    var result = cmd.ExecuteScalar();
+                    return result != null ? ParseStringToDouble(result.ToString()) : null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка: {ex.Message}");
+                return null;
+            }
+        }
+
+        public static double ParseStringToDouble(string input)
+        {
+            if (string.IsNullOrWhiteSpace(input)) return 0.0;
+
+            try
+            {
+                // Удаляем все нецифровые символы, кроме точки и запятой
+                string cleanInput = new string(input.Where(c => char.IsDigit(c) || c == '.' || c == ',').ToArray());
+
+                // Заменяем запятые на точки для корректного парсинга
+                cleanInput = cleanInput.Replace(",", ".");
+
+                // Если строка пустая после очистки, возвращаем 0
+                if (string.IsNullOrWhiteSpace(cleanInput)) return 0.0;
+
+                // Пробуем разные форматы
+                if (double.TryParse(cleanInput, NumberStyles.Any, CultureInfo.InvariantCulture, out var result))
+                {
+                    return Math.Round(result, 3);
+                }
+
+                // Если не удалось распарсить, пробуем извлечь первое число из строки
+                var match = System.Text.RegularExpressions.Regex.Match(input, @"(\d+[.,]?\d*)");
+                if (match.Success && double.TryParse(match.Groups[1].Value.Replace(",", "."),
+                    NumberStyles.Any, CultureInfo.InvariantCulture, out result))
+                {
+                    return Math.Round(result, 3);
+                }
+
+                return 0.0;
+            }
+            catch
+            {
+                return 0.0;
+            }
+        }
+
     }
 }

@@ -53,6 +53,7 @@ namespace TESTDIP.View
                 LoadMetals();
                 ChartTypeComboBox.SelectedIndex = 0; // Выбираем первый тип графика по умолчанию
                 UpdateChart();
+
             }
             catch (Exception ex)
             {
@@ -378,30 +379,19 @@ namespace TESTDIP.View
             {
                 try
                 {
-                    // 1. Сохраняем график как временное изображение
                     string tempImagePath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "chart_export.png");
                     SaveChartAsImage(tempImagePath);
-
-                    // 2. Создаем Excel файл с данными и изображением
                     using (var workbook = new XLWorkbook())
                     {
                         var worksheet = workbook.Worksheets.Add("Данные");
-
-                        // Добавляем метаданные
                         worksheet.Cell(1, 1).Value = "Экспорт данных графика";
                         worksheet.Range(1, 1, 1, 2).Merge().Style.Font.Bold = true;
-
-                        // Добавляем данные таблицей
                         int dataRow = 3;
                         worksheet.Cell(dataRow, 1).Value = "Расстояние (км)";
-
-                        // Заголовки столбцов
                         for (int i = 0; i < SeriesCollection.Count; i++)
                         {
                             worksheet.Cell(dataRow, i + 2).Value = SeriesCollection[i].Title;
                         }
-
-                        // Данные
                         for (int i = 0; i < Labels.Count; i++)
                         {
                             worksheet.Cell(dataRow + 1 + i, 1).Value = Labels[i];
@@ -467,7 +457,6 @@ namespace TESTDIP.View
                 {
                     Width = Chart.ActualWidth * scale,
                     Height = Chart.ActualHeight * scale,
-                    Background = Brushes.White,
                     Child = new CartesianChart
                     {
                         Series = Chart.Series,
@@ -476,7 +465,6 @@ namespace TESTDIP.View
                         LegendLocation = Chart.LegendLocation,
                         Width = Chart.ActualWidth * scale,
                         Height = Chart.ActualHeight * scale,
-                        Background = Brushes.White
                     }
                 };
                 border.Measure(new Size(border.Width, border.Height));
