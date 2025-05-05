@@ -1,0 +1,48 @@
+﻿<Window x:Class="TESTDIP.View.EditSampleWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:TESTDIP.View"
+        mc:Ignorable="d"
+        Title="EditSampleWindow" Height="450" Width="800">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Text="Металл:" Grid.Row="0"/>
+        <TextBlock Text="{Binding EditedSample.Metal.Name}" Grid.Row="0" Margin="100,0,0,0"/>
+
+        <TextBlock Text="Значение:" Grid.Row="1"/>
+        <TextBox Text="{Binding EditedSample.Value}" Grid.Row="1" Margin="100,0,0,0"/>
+
+        <TextBlock Text="Дата отбора:" Grid.Row="2"/>
+        <DatePicker SelectedDate="{Binding EditedSample.SamplingDate}" Grid.Row="2" Margin="100,0,0,0"/>
+
+        <TextBlock Text="Номер аналитики:" Grid.Row="3"/>
+        <TextBox Text="{Binding EditedSample.AnalyticsNumber}" Grid.Row="3" Margin="100,0,0,0"/>
+
+        <TextBlock Text="Вид:" Grid.Row="4"/>
+        <TextBox Text="{Binding EditedSample.Type}" Grid.Row="4" Margin="100,0,0,0"/>
+
+        <TextBlock Text="Фракция:" Grid.Row="5"/>
+        <TextBox Text="{Binding EditedSample.Fraction}" Grid.Row="5" Margin="100,0,0,0"/>
+
+        <TextBlock Text="Повторность:" Grid.Row="6"/>
+        <TextBox Text="{Binding EditedSample.Repetition}" Grid.Row="6" Margin="100,0,0,0"/>
+
+        <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Сохранить" Width="80" Margin="0,0,10,0" Click="Save_Click"/>
+            <Button Content="Отмена" Width="80" Click="Cancel_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

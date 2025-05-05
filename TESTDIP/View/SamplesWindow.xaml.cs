@@ -104,7 +104,71 @@ namespace TESTDIP
                 return metalFilter && yearFilter;
             };
         }
+        private void EditSample_Click(object sender, RoutedEventArgs e)
+        {
+            if (SamplesDataGrid.SelectedItem is Sample selectedSample)
+            {
+                var editWindow = new EditSampleWindow(selectedSample);
+                if (editWindow.ShowDialog() == true)
+                {
+                    // Обновляем пробу в базе данных
+                    bool success = _dbHelper.UpdateSample(editWindow.EditedSample);
 
+                    if (success)
+                    {
+                        // Обновляем пробу в коллекции
+                        int index = _samples.IndexOf(selectedSample);
+                        _samples[index] = editWindow.EditedSample;
+
+                        // Обновляем фильтры (если изменился металл или год)
+                        LoadFilters();
+                    }
+                    else
+                    {
+                        MessageBox.Show("Не удалось обновить пробу в базе данных", "Ошибка",
+                            MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
+                }
+            }
+            else
+            {
+                MessageBox.Show("Выберите пробу для редактирования", "Внимание",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        private void DeleteSample_Click(object sender, RoutedEventArgs e)
+        {
+            if (SamplesDataGrid.SelectedItem is Sample selectedSample)
+            {
+                var result = MessageBox.Show(
+                    $"Удалить пробу {selectedSample.Metal.Name} от {selectedSample.SamplingDate:dd.MM.yyyy}?",
+                    "Подтверждение удаления",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    bool success = _dbHelper.DeleteSample(selectedSample.Id);
+
+                    if (success)
+                    {
+                        _samples.Remove(selectedSample);
+                        LoadFilters(); // Обновляем фильтры после удаления
+                    }
+                    else
+                    {
+                        MessageBox.Show("Не удалось удалить пробу", "Ошибка",
+                            MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
+                }
+            }
+            else
+            {
+                MessageBox.Show("Выберите пробу для удаления", "Внимание",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
         private void AddSample_Click(object sender, RoutedEventArgs e)
         {
             var addSampleWindow = new AddSampleWindow(_location.Id, $"{_location.Name} (пл. {_location.SiteNumber})");

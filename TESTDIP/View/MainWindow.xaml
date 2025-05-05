@@ -6,32 +6,33 @@
         xmlns:local="clr-namespace:TESTDIP" xmlns:gmap="clr-namespace:GMap.NET.WindowsPresentation;assembly=GMap.NET.WindowsPresentation"
         mc:Ignorable="d"
          Height="950" Width="1600">
-    <Grid>
+    <Grid Margin="0,10,0,0">
 
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
-        <gmap:GMapControl x:Name="MapControl" Grid.Column="0" />
+        <gmap:GMapControl x:Name="MapControl" Grid.Column="0" Margin="0,10,0,0" />
         <Grid x:Name="LegendGrid" 
           HorizontalAlignment="Left" 
           VerticalAlignment="Top"
           Margin="10"
           Panel.ZIndex="1000"/>
         <StackPanel Grid.Column="1" Orientation="Vertical" Margin="10,10,10,0" VerticalAlignment="Top">
-            <ComboBox x:Name="YearComboBox" Width="150" Margin="0,0,0,10" SelectedIndex="0">
-                <ComboBoxItem>Выбор года</ComboBoxItem>
-            </ComboBox>
-            <ComboBox x:Name="MetalComboBox" Width="150" Margin="0,0,0,10" SelectedIndex="0">
-                <ComboBoxItem>Выбор металла</ComboBoxItem>
-            </ComboBox>
             <Button x:Name="AddPointButton" Content="Добавить точку" Width="150" Margin="0,0,0,10" Click="AddPointButton_Click"/>
-            
+
             <Button x:Name="GoToStatsButton" Content="Перейти к статистике" Width="150" Margin="0,0,0,10" Click="GoToStatsButton_Click"/>
             <Button x:Name="ExportButton" Content="Экспорт карты" Width="150" Margin="0,0,0,10" Click="ExportButton_Click"/>
             <Button x:Name="CalculateButton" Content="Рассчитать" Width="150" Margin="0,0,0,10" Click="CalculateButton_Click" />
             <Button x:Name="ResetButton" Content="Сбросить отрисовку" Click="ResetButton_Click" Margin="5"/>
+            <Button x:Name="LoadWindRoseButton" 
+        Content="Загрузить розу ветров" 
+        Click="LoadWindRoseButton_Click"
+        Margin="5"
+        Padding="10,5"
+        ToolTip="Загрузить данные розы ветров из CSV-файла"/>
         </StackPanel>
         
+
     </Grid>
 </Window>

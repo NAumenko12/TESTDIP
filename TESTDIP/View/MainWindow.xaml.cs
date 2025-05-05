@@ -17,6 +17,7 @@ using TESTDIP.DataBase;
 using TESTDIP.View;
 using System.IO;
 using TESTDIP.ViewModel;
+using System.Windows.Threading;
 
 namespace TESTDIP;
 
@@ -32,21 +33,28 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         InitializeMap();
-        LoadLocations();
-        LoadMetalsComboBox();
         AddPlantMarker();
+        LoadLocations();
+
+        // Задержка для инициализации карты
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            MapControl.Position = ReferencePoint;
+            MapControl.Zoom = 14; 
+        }), DispatcherPriority.Loaded);
     }
 
     private void InitializeMap()
     {
         MapControl.MapProvider = GMapProviders.GoogleMap;
-        MapControl.Position = ReferencePoint;
         MapControl.MinZoom = 2;
         MapControl.MaxZoom = 18;
-        MapControl.Zoom = 10;
-        MapControl.MouseWheelZoomType = MouseWheelZoomType.MousePositionAndCenter;
+        MapControl.Zoom = 10; 
         MapControl.CanDragMap = true;
         MapControl.MouseDown += MapControl_MouseDown;
+
+        MapControl.Position = ReferencePoint;
+        MapControl.Zoom = 12; 
     }
 
     private void AddPlantMarker()
@@ -73,63 +81,71 @@ public partial class MainWindow : Window
         UpdateMap(locations);
     }
 
-    private void LoadMetalsComboBox()
-    {
-        MetalComboBox.Items.Clear();
-        MetalComboBox.Items.Add("Выбор металла");
 
-        foreach (var metal in _dbHelper.GetMetals())
-        {
-            MetalComboBox.Items.Add(new ComboBoxItem
-            {
-                Content = metal.Name,
-                Tag = metal.Id
-            });
-        }
-
-        MetalComboBox.SelectedIndex = 0;
-    }
 
     private void UpdateMap(List<Location> locations)
     {
-        var plantMarker = MapControl.Markers.FirstOrDefault(m => m == _plantMarker);
-        var markersToKeep = MapControl.Markers.OfType<GMapPolygon>().ToList();
-
-        MapControl.Markers.Clear();
-
-        // Восстанавливаем полигоны и маркер завода
-        foreach (var polygon in markersToKeep)
+        try
         {
-            MapControl.Markers.Add(polygon);
-        }
-        if (plantMarker != null)
-        {
-            MapControl.Markers.Add(plantMarker);
-        }
-
-        // Добавляем маркеры локаций (без изменений во внешнем виде)
-        foreach (var location in locations)
-        {
-            var marker = new GMapMarker(new PointLatLng(location.Latitude, location.Longitude))
+            MapControl.Markers.Clear();
+            if (_plantMarker != null)
             {
-                Shape = new System.Windows.Shapes.Ellipse
+                MapControl.Markers.Add(_plantMarker);
+            }
+            foreach (var location in locations)
+            {
+                if (location == null) continue;
+
+                var marker = new GMapMarker(new PointLatLng(location.Latitude, location.Longitude))
                 {
-                    Fill = GetDistanceColor(location),
-                    Width = 10,
-                    Height = 10,
-                    Stroke = Brushes.Black,
-                    StrokeThickness = 1
-                },
-                Tag = location
-            };
+                    Shape = new Ellipse
+                    {
+                        Fill = GetDistanceColor(location),
+                        Width = 10,
+                        Height = 10,
+                        Stroke = Brushes.Black,
+                        StrokeThickness = 1
+                    },
+                    Tag = location
+                };
 
-            // Добавляем ToolTip с названием
-            ToolTipService.SetToolTip(marker.Shape, location.SiteNumber);
+                ToolTipService.SetToolTip(marker.Shape, location.SiteNumber);
+                MapControl.Markers.Add(marker);
+            }
+            if (MapControl.Markers.Count > 0)
+            {
+                var rect = GetMarkersBoundingBox();
+                MapControl.SetZoomToFitRect(rect);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Ошибка обновления карты: {ex.Message}");
+        }
+    }
+    private RectLatLng GetMarkersBoundingBox()
+    {
+        double minLat = double.MaxValue;
+        double maxLat = double.MinValue;
+        double minLon = double.MaxValue;
+        double maxLon = double.MinValue;
 
-            MapControl.Markers.Add(marker);
+        foreach (var marker in MapControl.Markers)
+        {
+            if (marker.Position.Lat < minLat) minLat = marker.Position.Lat;
+            if (marker.Position.Lat > maxLat) maxLat = marker.Position.Lat;
+            if (marker.Position.Lng < minLon) minLon = marker.Position.Lng;
+            if (marker.Position.Lng > maxLon) maxLon = marker.Position.Lng;
         }
 
-        MapControl.ZoomAndCenterMarkers(null);
+        // Добавляем небольшую буферную зону
+        const double buffer = 0.01; // ~1 км
+        return new RectLatLng(
+            maxLat + buffer,
+            minLon - buffer,
+            (maxLon - minLon) + 2 * buffer,
+            (maxLat - minLat) + 2 * buffer
+        );
     }
 
     private Brush GetDistanceColor(Location location)
@@ -204,7 +220,6 @@ public partial class MainWindow : Window
             var dialog = new CalculateDialog(_dbHelper, ReferencePoint);
             if (dialog.ShowDialog() == true)
             {
-                // Проверяем, что все необходимые данные выбраны
                 if (dialog.SelectedLocation == null)
                 {
                     MessageBox.Show("Не выбрана опорная точка");
@@ -228,13 +243,35 @@ public partial class MainWindow : Window
             MessageBox.Show($"Ошибка при открытии диалога расчета: {ex.Message}");
         }
     }
+    private void LoadWindRoseButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var openFileDialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "CSV файлы (*.csv)|*.csv|Все файлы (*.*)|*.*",
+                Title = "Выберите файл с данными розы ветров"
+            };
 
+            if (openFileDialog.ShowDialog() == true)
+            {
+                var windRose = WindRoseLoader.LoadFromFile(openFileDialog.FileName);
+                _windRoseData = windRose;
+
+                MessageBox.Show("Данные розы ветров успешно загружены!");
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Ошибка загрузки розы ветров: {ex.Message}");
+        }
+    }
+    private WindRoseData _windRoseData = new WindRoseData();
 
     private void CalculateAndDrawPollutionField(Location referencePoint, Metal metal, int year)
     {
         try
         {
-            // Проверяем входные параметры
             if (referencePoint == null)
             {
                 MessageBox.Show("Не выбрана опорная точка");
@@ -246,23 +283,19 @@ public partial class MainWindow : Window
                 MessageBox.Show("Не выбран металл");
                 return;
             }
-
-            // Очищаем предыдущие полигоны
             ClearConcentrationFields();
-
-            // Создаем экземпляр калькулятора
             var calculator = new ConcentrationCalculator(_dbHelper);
-
-            // Получаем сетку с концентрациями
+            if (_windRoseData != null)
+            {
+                calculator.SetWindRoseData(_windRoseData);
+            }
             var grid = calculator.CalculateField(
                 ReferencePoint,
                 referencePoint,
                 metal,
                 year,
-                gridStepKm: 0.7,
+                gridStepKm: 0.5, 
                 areaSizeKm: 200.0);
-
-            // Проверка на null перед проверкой Count
             if (grid == null || grid.Count == 0)
             {
                 MessageBox.Show("Нет данных для построения поля. Проверьте:\n" +
@@ -270,36 +303,293 @@ public partial class MainWindow : Window
                               "2. Корректность опорной точки");
                 return;
             }
+            double minConcentration = grid.Min(p => p.Concentration);
+            double maxConcentration = grid.Max(p => p.Concentration);
+            double avgConcentration = grid.Average(p => p.Concentration);
 
-            // Уровни концентрации для изолиний
-            var levels = new[] { 0.1, 0.5, 1.0, 2.0, 5.0 };
-
-            // Создаем полигоны для каждого уровня
-            foreach (var level in levels)
+            Console.WriteLine($"Диапазон концентраций: мин={minConcentration}, макс={maxConcentration}, средняя={avgConcentration}");
+            if (maxConcentration < 0.001)
             {
-                var contourPoints = FindContourPoints(grid, level);
-                if (contourPoints != null && contourPoints.Count > 2)
+                MessageBox.Show("Рассчитанные концентрации слишком малы. Проверьте входные данные.");
+                return;
+            }
+            double[] levels;
+            if (maxConcentration - minConcentration < 0.1)
+            {
+                levels = new double[]
                 {
-                    var polygon = CreateContourPolygon(contourPoints, GetColorForLevel(level), level);
-                    _concentrationPolygons.Add(polygon);
-                    MapControl.Markers.Add(polygon);
+                minConcentration,
+                minConcentration + (maxConcentration - minConcentration) * 0.2,
+                minConcentration + (maxConcentration - minConcentration) * 0.4,
+                minConcentration + (maxConcentration - minConcentration) * 0.6,
+                minConcentration + (maxConcentration - minConcentration) * 0.8,
+                maxConcentration
+                };
+            }
+            else
+            {
+                levels = new double[6];
+                for (int i = 0; i < 6; i++)
+                {
+                    double factor = i / 5.0;
+                    factor = Math.Pow(factor, 0.5); 
+                    levels[i] = minConcentration + (maxConcentration - minConcentration) * factor;
                 }
             }
-
-            // Центрируем карту на области загрязнения
+            for (int i = 0; i < levels.Length; i++)
+            {
+                levels[i] = Math.Round(levels[i], 3);
+            }
+            DrawHeatMap(grid, levels);
             ZoomToPollutionArea(grid);
-
-            // Показываем легенду
-            ShowLegendAlternative(levels);
+            ShowLegend(levels, metal.Name);
         }
         catch (Exception ex)
         {
             MessageBox.Show($"Ошибка при построении поля: {ex.Message}\n\nСтек вызовов: {ex.StackTrace}");
         }
     }
+    private void DrawHeatMap(List<GridPoint> grid, double[] levels)
+    {
+        try
+        {
+            
+            Console.WriteLine("Уровни концентрации:");
+            foreach (var level in levels)
+            {
+                Console.WriteLine($"  {level}");
+            }
 
+            
+            for (int i = levels.Length - 1; i >= 0; i--)
+            {
+                double level = levels[i];
 
-    private static List<PointLatLng> FindContourPoints(List<GridPoint> grid, double targetLevel)
+                
+                var pointsAboveLevel = grid.Where(p => p.Concentration >= level).ToList();
+
+                Console.WriteLine($"Для уровня {level} найдено {pointsAboveLevel.Count} точек");
+
+                if (pointsAboveLevel.Count < 3) continue;
+
+                
+                var polygons = CreateContourPolygons(pointsAboveLevel, level, levels.Min(), levels.Max());
+
+                foreach (var polygon in polygons)
+                {
+                    _concentrationPolygons.Add(polygon);
+                    MapControl.Markers.Add(polygon);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Ошибка при отрисовке тепловой карты: {ex.Message}");
+        }
+    }
+    private List<GMapPolygon> CreateContourPolygons(List<GridPoint> points, double level, double minLevel, double maxLevel)
+    {
+        var result = new List<GMapPolygon>();
+
+        try
+        {
+            
+            var convexHull = ComputeConvexHull(points.Select(p => new PointLatLng(p.Lat, p.Lon)).ToList());
+
+            if (convexHull.Count < 3) return result;
+
+            
+            var polygon = new GMapPolygon(convexHull)
+            {
+                Shape = new System.Windows.Shapes.Path
+                {
+                    Stroke = new System.Windows.Media.SolidColorBrush(GetColorForLevel(level, minLevel, maxLevel)),
+                    StrokeThickness = 2,
+                    Fill = new System.Windows.Media.SolidColorBrush(
+                        System.Windows.Media.Color.FromArgb(150,
+                        GetColorForLevel(level, minLevel, maxLevel).R,
+                        GetColorForLevel(level, minLevel, maxLevel).G,
+                        GetColorForLevel(level, minLevel, maxLevel).B)),
+                    ToolTip = $"Уровень {level.ToString("F3", new System.Globalization.CultureInfo("ru-RU")).TrimEnd('0').TrimEnd(',')} мг/м³"
+                },
+                Tag = level
+            };
+
+            result.Add(polygon);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Ошибка при создании полигонов: {ex.Message}");
+        }
+
+        return result;
+    }
+    private List<PointLatLng> ComputeConvexHull(List<PointLatLng> points)
+    {
+        if (points.Count < 3) return points;
+
+        
+        var p0 = points.OrderBy(p => p.Lat).ThenBy(p => p.Lng).First();
+
+        
+        var sortedPoints = points.OrderBy(p =>
+        {
+            double dx = p.Lng - p0.Lng;
+            double dy = p.Lat - p0.Lat;
+            return Math.Atan2(dy, dx);
+        }).ToList();
+
+        
+        var hull = new List<PointLatLng>();
+        hull.Add(sortedPoints[0]);
+        hull.Add(sortedPoints[1]);
+
+        for (int i = 2; i < sortedPoints.Count; i++)
+        {
+            while (hull.Count > 1 && !IsLeftTurn(hull[hull.Count - 2], hull[hull.Count - 1], sortedPoints[i]))
+            {
+                hull.RemoveAt(hull.Count - 1);
+            }
+            hull.Add(sortedPoints[i]);
+        }
+
+        return hull;
+    }
+
+    
+    private bool IsLeftTurn(PointLatLng p1, PointLatLng p2, PointLatLng p3)
+    {
+        return ((p2.Lng - p1.Lng) * (p3.Lat - p1.Lat) - (p2.Lat - p1.Lat) * (p3.Lng - p1.Lng)) > 0;
+    }
+
+    
+    private void ShowLegend(double[] levels, string metalName)
+    {
+        LegendGrid.Children.Clear();
+
+        var legendPanel = new System.Windows.Controls.StackPanel
+        {
+            Orientation = System.Windows.Controls.Orientation.Vertical,
+            Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White),
+            Margin = new System.Windows.Thickness(10),
+            Opacity = 0.9,
+            MinWidth = 200
+        };
+
+ 
+        legendPanel.Children.Add(new System.Windows.Controls.TextBlock
+        {
+            Text = $"Концентрация {metalName} (мг/м³)",
+            FontWeight = System.Windows.FontWeights.Bold,
+            Margin = new System.Windows.Thickness(0, 0, 0, 10),
+            TextAlignment = System.Windows.TextAlignment.Center
+        });
+
+     
+        legendPanel.Children.Add(new System.Windows.Controls.TextBlock
+        {
+            Text = "С учетом розы ветров",
+            FontStyle = System.Windows.FontStyles.Italic,
+            Margin = new System.Windows.Thickness(0, 0, 0, 10),
+            TextAlignment = System.Windows.TextAlignment.Center
+        });
+
+       
+        foreach (var level in levels.OrderByDescending(l => l))
+        {
+            var stack = new System.Windows.Controls.StackPanel
+            {
+                Orientation = System.Windows.Controls.Orientation.Horizontal,
+                Margin = new System.Windows.Thickness(5)
+            };
+
+            stack.Children.Add(new System.Windows.Shapes.Rectangle
+            {
+                Width = 30,
+                Height = 15,
+                Fill = new System.Windows.Media.SolidColorBrush(GetColorForLevel(level, levels.Min(), levels.Max())),
+                Margin = new System.Windows.Thickness(0, 0, 10, 0),
+                StrokeThickness = 1,
+                Stroke = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Black)
+            });
+
+           
+            var culture = new System.Globalization.CultureInfo("ru-RU");
+            string formattedValue = level.ToString("F3", culture);
+
+           
+            if (formattedValue.Contains(","))
+            {
+                formattedValue = formattedValue.TrimEnd('0').TrimEnd(',');
+                if (formattedValue == "") formattedValue = "0";
+            }
+
+            stack.Children.Add(new System.Windows.Controls.TextBlock
+            {
+                Text = formattedValue,
+                VerticalAlignment = System.Windows.VerticalAlignment.Center
+            });
+
+            legendPanel.Children.Add(stack);
+        }
+
+        
+        legendPanel.Children.Add(new System.Windows.Controls.TextBlock
+        {
+            Text = $"Дата расчета: {DateTime.Now.ToShortDateString()}",
+            Margin = new System.Windows.Thickness(0, 10, 0, 0),
+            FontSize = 10,
+            TextAlignment = System.Windows.TextAlignment.Center
+        });
+
+        
+        var border = new System.Windows.Controls.Border
+        {
+            BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Black),
+            BorderThickness = new System.Windows.Thickness(1),
+            Child = legendPanel,
+            CornerRadius = new System.Windows.CornerRadius(5),
+            Padding = new System.Windows.Thickness(10),
+            Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White),
+            Effect = new System.Windows.Media.Effects.DropShadowEffect
+            {
+                ShadowDepth = 3,
+                Opacity = 0.3,
+                BlurRadius = 5
+            }
+        };
+
+        LegendGrid.Children.Add(border);
+
+        
+        System.Windows.Controls.Grid.SetColumn(border, 1);
+        System.Windows.Controls.Grid.SetRow(border, 0);
+    }
+
+    private System.Windows.Media.Color GetColorForLevel(double level, double minLevel, double maxLevel)
+    {
+        
+        double normalizedLevel = Math.Max(0, Math.Min(1, (level - minLevel) / (maxLevel - minLevel)));
+
+        if (normalizedLevel < 0.5)
+        {
+           
+            byte r = (byte)(255 * normalizedLevel * 2);
+            byte g = 255;
+            byte b = 0;
+            return System.Windows.Media.Color.FromRgb(r, g, b);
+        }
+        else
+        {
+           
+            byte r = 255;
+            byte g = (byte)(255 * (1 - (normalizedLevel - 0.5) * 2));
+            byte b = 0;
+            return System.Windows.Media.Color.FromRgb(r, g, b);
+        }
+    }
+
+    /*private static List<PointLatLng> FindContourPoints(List<GridPoint> grid, double targetLevel)
     {
         var contourPoints = new List<PointLatLng>();
 
@@ -334,9 +624,9 @@ public partial class MainWindow : Window
             Console.WriteLine($"Ошибка при поиске контурных точек: {ex.Message}");
             return contourPoints;
         }
-    }
+    }*/
 
-    private GMapPolygon CreateContourPolygon(List<PointLatLng> points, Color color, double level)
+    /*private GMapPolygon CreateContourPolygon(List<PointLatLng> points, Color color, double level)
     {
         var polygon = new GMapPolygon(points)
         {
@@ -351,7 +641,7 @@ public partial class MainWindow : Window
         };
 
         return polygon;
-    }
+    }*/
 
     private void ZoomToPollutionArea(List<GridPoint> grid)
     {
@@ -366,7 +656,7 @@ public partial class MainWindow : Window
         MapControl.SetZoomToFitRect(rect);
     }
 
-    private void ShowLegendAlternative(double[] levels)
+   /* private void ShowLegendAlternative(double[] levels)
     {
         LegendGrid.Children.Clear();
 
@@ -418,15 +708,17 @@ public partial class MainWindow : Window
 
         LegendGrid.Children.Add(border);
     }
-
-    private Color GetColorForLevel(double level)
+    */
+   
+    
+    /*private Color GetColorForLevel(double level)
     {
         double ratio = Math.Min(level / 5.0, 1.0);
         return Color.FromRgb(
             (byte)(255 * ratio),
             (byte)(255 * (1 - ratio)),
             0);
-    }
+    }*/
 
     private void ClearConcentrationFields()
     {
@@ -436,7 +728,7 @@ public partial class MainWindow : Window
         }
         _concentrationPolygons.Clear();
 
-        // Очищаем легенду
+        
         LegendGrid.Children.Clear();
     }
 
@@ -450,10 +742,10 @@ public partial class MainWindow : Window
     {
         try
         {
-            // Очищаем полигоны концентрации
+            
             ClearConcentrationFields();
 
-            // Сбрасываем легенду
+           
             LegendGrid.Children.Clear();
         }
         catch (Exception ex)
@@ -473,7 +765,7 @@ public partial class MainWindow : Window
         {
             try
             {
-                // Создаем RenderTargetBitmap для рендеринга карты
+                
                 var renderBitmap = new RenderTargetBitmap(
                     (int)MapControl.ActualWidth,
                     (int)MapControl.ActualHeight,
@@ -481,7 +773,7 @@ public partial class MainWindow : Window
 
                 renderBitmap.Render(MapControl);
 
-                // Выбираем кодировщик в зависимости от выбранного формата
+                
                 BitmapEncoder encoder;
                 if (saveFileDialog.FilterIndex == 1)
                     encoder = new PngBitmapEncoder();
@@ -490,7 +782,7 @@ public partial class MainWindow : Window
 
                 encoder.Frames.Add(BitmapFrame.Create(renderBitmap));
 
-                // Сохраняем файл
+               
                 using (var fileStream = new FileStream(saveFileDialog.FileName, FileMode.Create))
                 {
                     encoder.Save(fileStream);
@@ -504,5 +796,5 @@ public partial class MainWindow : Window
             }
         }
     }
-   
+
 }

@@ -20,7 +20,70 @@ namespace TESTDIP.DataBase
 
             _connectionString = @"Data Source=C:\Users\natac\source\repos\TESTDIP\TESTDIP\DataBase\Listi.db;Version=3;";
         }
+        public static double[] GetWindRose(int year)
+        {
+            return new double[16] {
+        5.1, 3.1, 2.5, 4.0, 6.0, 8.2, 10.1, 12.5,
+        14.0, 9.7, 7.3, 5.6, 4.1, 3.3, 2.8, 1.7
+    };
+        }
+        public bool UpdateSample(Sample sample)
+        {
+            try
+            {
+                using (var connection = new SQLiteConnection(_connectionString))
+                {
+                    connection.Open();
+                    var command = new SQLiteCommand(
+                        "UPDATE Пробы SET " +
+                        "[FK_Металла] = @MetalId, " +
+                        "[Значение] = @Value, " +
+                        "[Дата_отбора] = @Date, " +
+                        "[Номер Аналитики] = @Analytics, " +
+                        "[ВИД] = @Type, " +
+                        "[Фракция] = @Fraction, " +
+                        "[Повторность] = @Repetition " +
+                        "WHERE [Id] = @Id", connection);
 
+                    command.Parameters.AddWithValue("@MetalId", sample.Metal.Id);
+                    command.Parameters.AddWithValue("@Value", sample.Value);
+                    command.Parameters.AddWithValue("@Date", sample.SamplingDate.ToString("yyyy-MM-dd")); // Форматируем дату
+                    command.Parameters.AddWithValue("@Analytics", sample.AnalyticsNumber);
+                    command.Parameters.AddWithValue("@Type", sample.Type);
+                    command.Parameters.AddWithValue("@Fraction", sample.Fraction);
+                    command.Parameters.AddWithValue("@Repetition", sample.Repetition);
+                    command.Parameters.AddWithValue("@Id", sample.Id);
+
+                    return command.ExecuteNonQuery() > 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка при обновлении пробы: {ex.Message}");
+                return false;
+            }
+        }
+
+        public bool DeleteSample(int sampleId)
+        {
+            try
+            {
+                using (var connection = new SQLiteConnection(_connectionString))
+                {
+                    connection.Open();
+                    var command = new SQLiteCommand(
+                        "DELETE FROM Пробы WHERE [Id] = @Id", connection);
+
+                    command.Parameters.AddWithValue("@Id", sampleId);
+                    return command.ExecuteNonQuery() > 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка при удалении пробы: {ex.Message}");
+                return false;
+            }
+        }
         public List<Location> GetLocations()
         {
             var locations = new List<Location>();
