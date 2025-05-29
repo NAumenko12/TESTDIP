@@ -1,0 +1,134 @@
+﻿<Window x:Class="TESTDIP.View.CalculationResultsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:TESTDIP.View"
+        mc:Ignorable="d"
+        Title="CalculationResultsWindow" Height="450" Width="800">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Заголовок -->
+        <TextBlock Grid.Row="0" Text="Результаты расчетов концентраций за весь период" 
+                   FontSize="18" FontWeight="Bold" 
+                   HorizontalAlignment="Center" Margin="10"/>
+
+        <!-- Панель фильтров -->
+        <Border Grid.Row="1" Background="LightGray" Padding="10" Margin="5">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Фильтр по металлу -->
+                <TextBlock Grid.Column="0" Text="Металл:" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <ComboBox x:Name="MetalFilterComboBox" Grid.Column="1" 
+                         DisplayMemberPath="Name" SelectedValuePath="Id"
+                         SelectionChanged="MetalFilterComboBox_SelectionChanged" Margin="0,0,15,0"/>
+
+                <!-- Фильтр по году -->
+                <TextBlock Grid.Column="2" Text="Год:" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <ComboBox x:Name="YearFilterComboBox" Grid.Column="3"
+                         SelectionChanged="YearFilterComboBox_SelectionChanged" Margin="0,0,15,0"/>
+
+                <!-- Фильтр по дате от -->
+                <TextBlock Grid.Column="4" Text="Дата от:" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <DatePicker x:Name="DateFromPicker" Grid.Column="5" 
+                           SelectedDateChanged="DateFromPicker_SelectedDateChanged" Margin="0,0,15,0"/>
+
+                <!-- Фильтр по дате до -->
+                <TextBlock Grid.Column="6" Text="Дата до:" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <DatePicker x:Name="DateToPicker" Grid.Column="7"
+                           SelectedDateChanged="DateToPicker_SelectedDateChanged" Margin="0,0,15,0"/>
+
+                <!-- Кнопки управления фильтрами -->
+                <StackPanel Grid.Column="9" Orientation="Horizontal">
+                    <Button x:Name="ApplyFiltersButton" Content="Применить" Width="80" Margin="5,0"
+                           Click="ApplyFiltersButton_Click"/>
+                    <Button x:Name="ClearFiltersButton" Content="Сбросить" Width="80" Margin="5,0"
+                           Click="ClearFiltersButton_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Таблица результатов -->
+        <DataGrid x:Name="ResultsDataGrid" Grid.Row="2" Margin="10"
+                 AutoGenerateColumns="False" IsReadOnly="True"
+                 CanUserAddRows="False" CanUserDeleteRows="False"
+                 SelectionMode="Extended" SelectionUnit="FullRow"
+                 VirtualizingPanel.IsVirtualizing="True"
+                 VirtualizingPanel.VirtualizationMode="Recycling"
+                 EnableRowVirtualization="True">
+
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="60"/>
+                <DataGridTextColumn Header="Металл" Binding="{Binding MetalName}" Width="120"/>
+                <DataGridTextColumn Header="Год" Binding="{Binding Year}" Width="80"/>
+                <DataGridTextColumn Header="Дата расчета" Binding="{Binding CalculationDate, StringFormat=dd.MM.yyyy HH:mm}" Width="140"/>
+                <DataGridTextColumn Header="Количество точек" Binding="{Binding PointCount}" Width="120"/>
+                <DataGridTextColumn Header="Мин. концентрация" Binding="{Binding MinConcentration, StringFormat=F4}" Width="140"/>
+                <DataGridTextColumn Header="Макс. концентрация" Binding="{Binding MaxConcentration, StringFormat=F4}" Width="140"/>
+                <DataGridTextColumn Header="Средняя концентрация" Binding="{Binding AvgConcentration, StringFormat=F4}" Width="150"/>
+                <DataGridTextColumn Header="Макс. расстояние (км)" Binding="{Binding MaxDistance, StringFormat=F2}" Width="140"/>
+            </DataGrid.Columns>
+
+            <DataGrid.ContextMenu>
+                <ContextMenu>
+                    <MenuItem Header="Просмотреть детали" Click="ViewDetailsMenuItem_Click"/>
+                    <MenuItem Header="Экспорт в Excel" Click="ExportToExcelMenuItem_Click"/>
+                    <Separator/>
+                    <MenuItem Header="Удалить выбранные" Click="DeleteSelectedMenuItem_Click"/>
+                </ContextMenu>
+            </DataGrid.ContextMenu>
+        </DataGrid>
+
+        <!-- Панель статистики и управления -->
+        <Border Grid.Row="3" Background="LightBlue" Padding="10" Margin="5">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Статистика -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <TextBlock x:Name="TotalRecordsTextBlock" Text="Всего записей: 0" 
+                              VerticalAlignment="Center" Margin="0,0,20,0"/>
+                    <TextBlock x:Name="FilteredRecordsTextBlock" Text="Отфильтровано: 0" 
+                              VerticalAlignment="Center" Margin="0,0,20,0"/>
+                    <TextBlock x:Name="SelectedRecordsTextBlock" Text="Выбрано: 0" 
+                              VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <!-- Кнопки действий -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button x:Name="ViewDetailsButton" Content="Просмотр деталей" Width="120" Margin="5,0"
+                           Click="ViewDetailsButton_Click" IsEnabled="False"/>
+                    <Button x:Name="ExportSelectedButton" Content="Экспорт выбранных" Width="120" Margin="5,0"
+                           Click="ExportSelectedButton_Click" IsEnabled="False"/>
+                    <Button x:Name="DeleteSelectedButton" Content="Удалить выбранные" Width="120" Margin="5,0"
+                           Click="DeleteSelectedButton_Click" IsEnabled="False"/>
+                    <Button x:Name="RefreshButton" Content="Обновить" Width="80" Margin="5,0"
+                           Click="RefreshButton_Click"/>
+                    <Button x:Name="CloseButton" Content="Закрыть" Width="80" Margin="5,0"
+                           Click="CloseButton_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

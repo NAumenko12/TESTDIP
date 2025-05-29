@@ -1,31 +1,17 @@
-﻿using LiveCharts.Wpf;
+﻿using ClosedXML.Excel;
 using LiveCharts;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using LiveCharts.Wpf;
+using Microsoft.Office.Interop.Excel;
+using System.Globalization;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Shapes;
+using System.Windows.Threading;
 using TESTDIP.DataBase;
 using TESTDIP.Model;
-using System.Globalization;
-using System.Data.SQLite;
 using TESTDIP.ViewModel;
-using System.Diagnostics;
-using System.IO;
-using System.Runtime.InteropServices;
-using Microsoft.Office.Interop.Excel;
-using System.Windows.Threading;
-using Range = Microsoft.Office.Interop.Excel.Range;
-using Microsoft.Win32;
-using ClosedXML.Excel;
 
 namespace TESTDIP.View
 {
@@ -41,7 +27,7 @@ namespace TESTDIP.View
         {
             InitializeComponent();
             DataContext = this;
-            YAxisFormatter = value => value.ToString("F3"); 
+            YAxisFormatter = value => value.ToString("F3");
             Loaded += StatisticsWindow_Loaded;
         }
         private void StatisticsWindow_Loaded(object sender, RoutedEventArgs e)
@@ -143,7 +129,7 @@ namespace TESTDIP.View
         private void UpdateAllMetalsChart()
         {
             if (YearComboBox.SelectedItem == null)
-               return;
+                return;
             int selectedYear = (int)YearComboBox.SelectedItem;
             var metals = MetalComboBox.ItemsSource as List<Metal>;
             SeriesCollection = new LiveCharts.SeriesCollection();
@@ -265,18 +251,18 @@ namespace TESTDIP.View
         {
             if (FiltersPanel == null) return;
 
-            
+
             switch (ChartTypeComboBox.SelectedIndex)
             {
-                case 0: 
+                case 0:
                     YearComboBox.Visibility = Visibility.Visible;
                     MetalComboBox.Visibility = Visibility.Visible;
                     break;
-                case 1: 
+                case 1:
                     YearComboBox.Visibility = Visibility.Visible;
                     MetalComboBox.Visibility = Visibility.Collapsed;
                     break;
-                case 2: 
+                case 2:
                     YearComboBox.Visibility = Visibility.Collapsed;
                     MetalComboBox.Visibility = Visibility.Visible;
                     break;
@@ -470,7 +456,7 @@ namespace TESTDIP.View
                 border.Measure(new Size(border.Width, border.Height));
                 border.Arrange(new Rect(0, 0, border.Width, border.Height));
                 Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
-                Thread.Sleep(300); 
+                Thread.Sleep(300);
                 renderTarget.Render(border);
                 using (var stream = File.Create(filePath))
                 {
@@ -506,4 +492,3 @@ namespace TESTDIP.View
         }
     }
 }
-

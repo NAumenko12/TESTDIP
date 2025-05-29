@@ -13,6 +13,8 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using TESTDIP.DataBase;
 using TESTDIP.Model;
+using TESTDIP.ViewModel;
+using TESTDIP.ViewModels;
 
 namespace TESTDIP.View
 {
@@ -21,90 +23,19 @@ namespace TESTDIP.View
     /// </summary>
     public partial class AddSampleWindow : Window
     {
-        private readonly int _locationId;
-        private readonly string _locationName;
-        private readonly DatabaseHelper _dbHelper = new DatabaseHelper();
-        public int NewSampleId { get; private set; }
-
-        public Sample NewSample { get; private set; }
-        public string LocationName { get; }
-
         public AddSampleWindow(int locationId, string locationName)
         {
             InitializeComponent();
-            _locationId = locationId;
-            LocationName = locationName;
-            DataContext = this;
-
-            LoadMetals();
-            SamplingDatePicker.SelectedDate = DateTime.Today;
-        }
-
-        private void LoadMetals()
-        {
-            try
+            var viewModel = new AddSampleViewModel(locationId, locationName);
+            viewModel.RequestClose += (sender, result) =>
             {
-                MetalComboBox.ItemsSource = _dbHelper.GetMetals();
-                MetalComboBox.SelectedIndex = 0;
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка загрузки списка металлов: {ex.Message}",
-                              "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void Save_Click(object sender, RoutedEventArgs e)
-        {
-            if (MetalComboBox.SelectedItem == null)
-            {
-                MessageBox.Show("Выберите металл из списка", "Ошибка",
-                              MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(ValueTextBox.Text))
-            {
-                MessageBox.Show("Введите значение пробы", "Ошибка",
-                              MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(AnalyticsNumberTextBox.Text))
-            {
-                MessageBox.Show("Введите номер аналитики", "Ошибка",
-                              MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-            NewSample = new Sample
-            {
-                LocationId = _locationId,
-                MetalId = (int)MetalComboBox.SelectedValue,
-                Type = TypeTextBox.Text,
-                Fraction = FractionTextBox.Text, 
-                Repetition = int.TryParse(RepetitionTextBox.Text, out int rep) ? rep : (int?)null,
-                Value = ValueTextBox.Text,
-                SamplingDate = SamplingDatePicker.SelectedDate ?? DateTime.Today,
-                AnalyticsNumber = AnalyticsNumberTextBox.Text,
-                Metal = (Metal)MetalComboBox.SelectedItem
-            };
-
-            try
-            {
-                NewSampleId = _dbHelper.AddSample(NewSample);
-                DialogResult = true;
+                DialogResult = result;
                 Close();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка сохранения пробы: {ex.Message}",
-                              "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            };
+            DataContext = viewModel;
         }
-        private void Cancel_Click(object sender, RoutedEventArgs e)
-        {
-            DialogResult = false;
-            Close();
-        }
+
+        public Sample NewSample => (DataContext as AddSampleViewModel)?.NewSample;
+        public int NewSampleId => (DataContext as AddSampleViewModel)?.NewSampleId ?? 0;
     }
 }

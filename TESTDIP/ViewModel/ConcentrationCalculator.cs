@@ -15,31 +15,29 @@ namespace TESTDIP.ViewModel
     public class ConcentrationCalculator
     {
         private readonly DatabaseHelper _dbHelper;
-        private WindRoseData _windRose;
 
         public ConcentrationCalculator(DatabaseHelper dbHelper)
         {
             _dbHelper = dbHelper;
-            _windRose = new WindRoseData(); 
         }
 
         public List<GridPoint> CalculateField(PointLatLng sourcePoint,
-                              Location referencePoint,
-                              Metal metal,
-                              int year,
-                              double gridStepKm = 0.7,
-                              double areaSizeKm = 100.0)
+                                     Location referencePoint,
+                                     Metal metal,
+                                     int year,
+                                     double gridStepKm = 0.7,
+                                     double areaSizeKm = 100.0)
         {
             var points = new List<GridPoint>();
 
             try
             {
-        
                 if (referencePoint == null || metal == null || _dbHelper == null)
                 {
                     Console.WriteLine("Ошибка: Один из параметров равен null");
                     return points;
                 }
+
                 double? concentration = _dbHelper.GetMetalConcentration(
                     referencePoint.Id,
                     metal.Id,
@@ -50,38 +48,34 @@ namespace TESTDIP.ViewModel
                     Console.WriteLine($"Нет данных о концентрации для локации {referencePoint.Id}, металла {metal.Id}, года {year}");
                     return points;
                 }
+
                 if (string.IsNullOrWhiteSpace(referencePoint.DistanceFromSource))
                 {
                     Console.WriteLine($"Ошибка: Расстояние от источника для локации {referencePoint.Id} не указано");
                     return points;
                 }
 
-                double C0 = concentration.Value;
-                if (Math.Abs(C0) < 0.001)
+                double Q0 = concentration.Value;
+                double r0 = ParseStringToDouble(referencePoint.DistanceFromSource); 
+                if (r0 <= 0)
                 {
-                    Console.WriteLine($"Ошибка: Концентрация в опорной точке слишком мала: {C0}");
-                    C0 = 0.001;
+                    Console.WriteLine($"Ошибка: Некорректное расстояние от источника: {referencePoint.DistanceFromSource}");
+                    return points;
                 }
-
-                double r0 = ParseStringToDouble(referencePoint.DistanceFromSource);
-                try
-                {
-                    r0 = ParseStringToDouble(referencePoint.DistanceFromSource);
-                    if (r0 <= 0)
-                    {
-                        Console.WriteLine($"Ошибка: Некорректное расстояние от источника: {referencePoint.DistanceFromSource}");
-                        r0 = 1.0;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Ошибка при преобразовании расстояния: {ex.Message}");
-                    r0 = 1.0;
-                }
-
                 double alpha = GetAlphaForMetal(metal.Name);
+                double decayFactor = GetDecayFactor(metal.Name); 
+
+                // Рассчитываем базовый параметр θ с учетом затухания
+                double theta = Q0 * Math.Pow(r0, alpha) * decayFactor;
+
+                Console.WriteLine($"Опорная точка: концентрация = {Q0}, расстояние = {r0} км");
+                Console.WriteLine($"Параметры: α = {alpha}, коэффициент затухания = {decayFactor}, θ = {theta:F3}");
+
+                // Преобразуем градусы в километры (примерно)
                 double latStep = gridStepKm / 110.574;
                 double lonStep = gridStepKm / (111.320 * Math.Cos(sourcePoint.Lat * Math.PI / 180));
+
+                // Рассчитываем для сетки
                 for (double lat = sourcePoint.Lat - areaSizeKm / 110.574;
                      lat <= sourcePoint.Lat + areaSizeKm / 110.574;
                      lat += latStep)
@@ -92,45 +86,32 @@ namespace TESTDIP.ViewModel
                     {
                         double r = CalculateDistance(sourcePoint, new PointLatLng(lat, lon));
                         if (r < 0.1) continue; 
-                        double dx = lon - sourcePoint.Lng;
-                        double dy = lat - sourcePoint.Lat;
-                        double phi = Math.Atan2(dy, dx);
-                        double oppositePhi = phi + Math.PI;
-                        if (oppositePhi >= 2 * Math.PI) oppositePhi -= 2 * Math.PI;
-                        double windProbability = _windRose.GetProbabilityForAngle(oppositePhi);
-                        if (windProbability < 0.01)
+                        if (r > areaSizeKm) continue; 
+
+                        double lambda = GetCharacteristicLength(metal.Name); 
+                        double Q = theta / Math.Pow(r, alpha) * Math.Exp(-r / lambda);
+
+                        if (Q > Q0 * 10) 
                         {
-                            windProbability = 0.01; 
+                            Q = Q0 * Math.Pow(r0 / r, 0.5); 
                         }
-                        double baseConcentration = CalculateConcentration(C0, r0, r, alpha);
-                        double adjustedConcentration = baseConcentration * windProbability * 8; 
-                        if (adjustedConcentration < 0.001)
-                        {
-                            adjustedConcentration = 0; 
-                            continue;
-                        }
+
                         points.Add(new GridPoint
                         {
                             Lat = lat,
                             Lon = lon,
-                            Concentration = adjustedConcentration
+                            Concentration = Math.Max(0.001, Q), 
+                            DistanceFromSource = r
                         });
                     }
                 }
-                if (points.Count > 0)
-                {
-                    double minConc = points.Min(p => p.Concentration);
-                    double maxConc = points.Max(p => p.Concentration);
-                    double avgConc = points.Average(p => p.Concentration);
 
-                    Console.WriteLine($"Рассчитано {points.Count} точек");
-                    Console.WriteLine($"Минимальная концентрация: {minConc}");
-                    Console.WriteLine($"Максимальная концентрация: {maxConc}");
-                    Console.WriteLine($"Средняя концентрация: {avgConc}");
-                }
-                else
+                Console.WriteLine($"Создано {points.Count} точек расчета");
+
+                var testPoint = points.FirstOrDefault(p => Math.Abs(p.DistanceFromSource - r0) < 1.0);
+                if (testPoint != null)
                 {
-                    Console.WriteLine("Не удалось рассчитать ни одной точки с ненулевой концентрацией");
+                    Console.WriteLine($"Проверка: на расстоянии {testPoint.DistanceFromSource:F1} км концентрация = {testPoint.Concentration:F3} мг/м³");
                 }
             }
             catch (Exception ex)
@@ -143,7 +124,7 @@ namespace TESTDIP.ViewModel
 
         private double CalculateDistance(PointLatLng p1, PointLatLng p2)
         {
-            double R = 6371; // Радиус Земли в км
+            double R = 6371;
             double dLat = (p2.Lat - p1.Lat) * Math.PI / 180.0;
             double dLon = (p2.Lng - p1.Lng) * Math.PI / 180.0;
 
@@ -153,30 +134,74 @@ namespace TESTDIP.ViewModel
             double c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
             return R * c;
         }
-        private double CalculateConcentration(double C0, double r0, double r, double alpha)
+
+        private double GetAlphaForMetal(string metalName)
         {
-            return C0 * Math.Pow(r0 / r, alpha) * Math.Exp(-(r - r0) * (r - r0) / (2 * r0 * r0));
+            var alphaValues = new Dictionary<string, double>
+            {
+                ["Pb"] = 1.2,
+                ["Cd"] = 1.1,
+                ["Hg"] = 1.0,
+                ["As"] = 1.15,
+                ["Ni"] = 1.1
+            };
+
+            return alphaValues.TryGetValue(metalName, out var alpha) ? alpha : 1.1;
         }
 
-        // Преобразование строки в число с обработкой различных форматов
+        private double GetDecayFactor(string metalName)
+        {
+            var decayFactors = new Dictionary<string, double>
+            {
+                ["Pb"] = 0.8,
+                ["Cd"] = 0.7,
+                ["Hg"] = 0.6,
+                ["As"] = 0.75,
+                ["Ni"] = 0.7
+            };
+
+            return decayFactors.TryGetValue(metalName, out var factor) ? factor : 0.7;
+        }
+
+        private double GetCharacteristicLength(string metalName)
+        { 
+            var lengthValues = new Dictionary<string, double>
+            {
+                ["Pb"] = 50.0,
+                ["Cd"] = 60.0,
+                ["Hg"] = 80.0,
+                ["As"] = 55.0,
+                ["Ni"] = 60.0
+            };
+
+            return lengthValues.TryGetValue(metalName, out var length) ? length : 60.0;
+        }
+
         public static double ParseStringToDouble(string input)
         {
             if (string.IsNullOrWhiteSpace(input)) return 0.0;
 
             try
             {
+                // Удаляем все нецифровые символы, кроме точки и запятой
                 string cleanInput = new string(input.Where(c => char.IsDigit(c) || c == '.' || c == ',').ToArray());
+
+                // Заменяем запятые на точки для корректного парсинга
                 cleanInput = cleanInput.Replace(",", ".");
+
+                // Если строка пустая после очистки, возвращаем 0
                 if (string.IsNullOrWhiteSpace(cleanInput)) return 0.0;
-                if (double.TryParse(cleanInput, System.Globalization.NumberStyles.Any,
-                    System.Globalization.CultureInfo.InvariantCulture, out var result))
+
+                // Пробуем разные форматы
+                if (double.TryParse(cleanInput, NumberStyles.Any, CultureInfo.InvariantCulture, out var result))
                 {
                     return Math.Round(result, 3);
                 }
+
+                // Если не удалось распарсить, пробуем извлечь первое число из строки
                 var match = System.Text.RegularExpressions.Regex.Match(input, @"(\d+[.,]?\d*)");
                 if (match.Success && double.TryParse(match.Groups[1].Value.Replace(",", "."),
-                    System.Globalization.NumberStyles.Any,
-                    System.Globalization.CultureInfo.InvariantCulture, out result))
+                    NumberStyles.Any, CultureInfo.InvariantCulture, out result))
                 {
                     return Math.Round(result, 3);
                 }
@@ -187,23 +212,6 @@ namespace TESTDIP.ViewModel
             {
                 return 0.0;
             }
-        }
-        private double GetAlphaForMetal(string metalName)
-        {
-            var alphaValues = new Dictionary<string, double>
-            {
-                ["Pb"] = 2.0,
-                ["Cd"] = 1.8,
-                ["Hg"] = 1.5,
-                ["As"] = 1.7,
-                ["Ni"] = 1.9
-            };
-
-            return alphaValues.TryGetValue(metalName, out var alpha) ? alpha : 1.8;
-        }
-        public void SetWindRoseData(WindRoseData windRose)
-        {
-            _windRose = windRose ?? new WindRoseData();
         }
     }
 }

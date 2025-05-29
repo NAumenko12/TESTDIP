@@ -31,7 +31,7 @@ namespace TESTDIP.View
 
         private readonly DatabaseHelper _dbHelper;
         private readonly PointLatLng _sourcePoint;
-
+        public bool UseWindRose => UseWindRoseCheckBox.IsChecked ?? false;
         public CalculateDialog(DatabaseHelper dbHelper, PointLatLng sourcePoint)
         {
             InitializeComponent();
@@ -75,7 +75,6 @@ namespace TESTDIP.View
                 var locations = _dbHelper?.GetLocations() ?? new List<Location>();
                 foreach (var loc in locations)
                 {
-                    // 1. Проверка валидности координат перед созданием маркера
                     if (Math.Abs(loc.Latitude) > 90 || Math.Abs(loc.Longitude) > 180)
                     {
                         Console.WriteLine($"Некорректные координаты локации {loc.Id}: {loc.Latitude}, {loc.Longitude}");
@@ -92,7 +91,7 @@ namespace TESTDIP.View
                             StrokeThickness = 1.5,
                             Fill = Brushes.Blue
                         },
-                        Tag = loc 
+                        Tag = loc
                     };
                     SelectionMap.Markers.Add(marker);
                 }
@@ -106,11 +105,11 @@ namespace TESTDIP.View
             }
         }
 
+
         private void SelectionMap_MouseDown(object sender, MouseButtonEventArgs e)
         {
             try
             {
-                // 3. Используем безопасное преобразование координат
                 var clickPoint = e.GetPosition(SelectionMap);
                 var clickPos = SelectionMap.FromLocalToLatLng((int)clickPoint.X, (int)clickPoint.Y);
 
@@ -125,8 +124,6 @@ namespace TESTDIP.View
                         Console.WriteLine("Маркер без локации или координат");
                         continue;
                     }
-
-                    // 5. Проверка на NaN в координатах
                     if (double.IsNaN(marker.Position.Lat))
                     {
                         Console.WriteLine($"Lat is NaN in marker {loc.Id}");
@@ -150,7 +147,6 @@ namespace TESTDIP.View
 
                 if (nearestMarker != null)
                 {
-                    // 6. Безопасное обновление SelectedLocation
                     if (nearestMarker.Tag is Location selectedLoc)
                     {
                         SelectedLocation = selectedLoc;
@@ -161,8 +157,6 @@ namespace TESTDIP.View
                         MessageBox.Show("Ошибка: маркер не содержит данные локации");
                         return;
                     }
-
-                    // ... остальной код ...
                 }
             }
             catch (Exception ex)
@@ -203,7 +197,7 @@ namespace TESTDIP.View
 
             try
             {
-                // 7. Проверка существования методов в DatabaseHelper
+                // Загрузка годов и металлов
                 var years = _dbHelper?.GetYearsForLocation(SelectedLocation.Id) ?? new List<int>();
                 YearComboBox.ItemsSource = years;
                 YearComboBox.SelectedItem = years.FirstOrDefault();
@@ -211,6 +205,10 @@ namespace TESTDIP.View
                 var metals = _dbHelper?.GetMetalsForLocation(SelectedLocation.Id) ?? new List<Metal>();
                 MetalComboBox.ItemsSource = metals;
                 MetalComboBox.SelectedItem = metals.FirstOrDefault();
+
+                // Подписка на изменения выбора
+                YearComboBox.SelectionChanged += UpdateConcentrationText;
+                MetalComboBox.SelectionChanged += UpdateConcentrationText;
             }
             catch (Exception ex)
             {
@@ -218,7 +216,50 @@ namespace TESTDIP.View
             }
         }
 
+        private void UpdateConcentrationText(object sender, SelectionChangedEventArgs e)
+        {
+            try
+            {
+                if (SelectedLocation == null || YearComboBox.SelectedItem == null || MetalComboBox.SelectedItem == null)
+                {
+                    ConcentrationTextBlock.Text = "Концентрация: —";
+                    return;
+                }
 
+                int year = (int)YearComboBox.SelectedItem;
+                Metal metal = (Metal)MetalComboBox.SelectedItem;
+
+                // Получаем концентрацию из базы данных
+                double? concentration = _dbHelper.GetMetalConcentration(
+                    SelectedLocation.Id,
+                    metal.Id,
+                    year);
+
+                if (concentration.HasValue)
+                {
+                    ConcentrationTextBlock.Text = $"Концентрация: {concentration.Value:F4} мг/м³";
+
+                    // Динамическое изменение цвета в зависимости от значения
+                    if (concentration.Value < 0.5)
+                        ConcentrationTextBlock.Foreground = Brushes.Green;
+                    else if (concentration.Value < 1.0)
+                        ConcentrationTextBlock.Foreground = Brushes.Orange;
+                    else
+                        ConcentrationTextBlock.Foreground = Brushes.Red;
+                }
+                else
+                {
+                    ConcentrationTextBlock.Text = "Концентрация: нет данных";
+                    ConcentrationTextBlock.Foreground = Brushes.Gray;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка при обновлении концентрации: {ex.Message}");
+                ConcentrationTextBlock.Text = "Концентрация: ошибка";
+                ConcentrationTextBlock.Foreground = Brushes.Red;
+            }
+        }
 
         private void OkButton_Click(object sender, RoutedEventArgs e)
         {
@@ -247,6 +288,6 @@ namespace TESTDIP.View
             DialogResult = false;
             Close();
         }
+
     }
 }
-

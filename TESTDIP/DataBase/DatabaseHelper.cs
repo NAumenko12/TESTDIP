@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Data.SqlClient;
 using System.Data.SQLite;
 using System.Globalization;
@@ -19,13 +20,183 @@ namespace TESTDIP.DataBase
         {
 
             _connectionString = @"Data Source=C:\Users\natac\source\repos\TESTDIP\TESTDIP\DataBase\Listi.db;Version=3;";
+            InitializeDatabase();
         }
-        public static double[] GetWindRose(int year)
+
+
+        private void InitializeDatabase()
         {
-            return new double[16] {
-        5.1, 3.1, 2.5, 4.0, 6.0, 8.2, 10.1, 12.5,
-        14.0, 9.7, 7.3, 5.6, 4.1, 3.3, 2.8, 1.7
-    };
+            try
+            {
+                using (var connection = new SQLiteConnection(_connectionString))
+                {
+                    connection.Open();
+
+                    // Создаем только таблицу Расчеты если не существует
+                    var createCalculationsTable = @"
+                CREATE TABLE IF NOT EXISTS Расчеты (
+                    ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                    FK_металла INTEGER NOT NULL,
+                    Год INTEGER NOT NULL,
+                    Широта REAL NOT NULL,
+                    Долгота REAL NOT NULL,
+                    Концентрация REAL NOT NULL,
+                    Расстояние_от_источника REAL,
+                    Дата_расчета DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (FK_металла) REFERENCES Металлы(ID)
+                )";
+
+                    using (var command = new SQLiteCommand(createCalculationsTable, connection))
+                    {
+                        command.ExecuteNonQuery();
+                    }
+
+                    Console.WriteLine("Таблица 'Расчеты' проверена/создана успешно");
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Ошибка при создании таблицы Расчеты: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Проверка существования таблицы
+        /// </summary>
+        public bool TableExists(string tableName)
+        {
+            try
+            {
+                using (var connection = new SQLiteConnection(_connectionString))
+                {
+                    connection.Open();
+                    var query = "SELECT name FROM sqlite_master WHERE type='table' AND name=@tableName";
+
+                    using (var command = new SQLiteCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@tableName", tableName);
+                        var result = command.ExecuteScalar();
+                        return result != null;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка при проверке существования таблицы {tableName}: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Проверка и создание таблицы Расчеты
+        /// </summary>
+        public void EnsureCalculationsTableExists()
+        {
+            try
+            {
+                if (!TableExists("Расчеты"))
+                {
+                    using (var connection = new SQLiteConnection(_connectionString))
+                    {
+                        connection.Open();
+
+                        var createCalculationsTable = @"
+                    CREATE TABLE Расчеты (
+                        ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                        FK_металла INTEGER NOT NULL,
+                        Год INTEGER NOT NULL,
+                        Широта REAL NOT NULL,
+                        Долгота REAL NOT NULL,
+                        Концентрация REAL NOT NULL,
+                        Расстояние_от_источника REAL,
+                        Дата_расчета DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (FK_металла) REFERENCES Металлы(ID)
+                    )";
+
+                        using (var command = new SQLiteCommand(createCalculationsTable, connection))
+                        {
+                            command.ExecuteNonQuery();
+                        }
+
+                        Console.WriteLine("Таблица 'Расчеты' создана успешно");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("Таблица 'Расчеты' уже существует");
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Ошибка при создании таблицы Расчеты: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Сохранение результатов расчета в БД
+        /// </summary>
+        public int SaveCalculationResults(List<GridPoint> gridPoints, int metalId, int year)
+        {
+            if (gridPoints == null || gridPoints.Count == 0)
+                throw new ArgumentException("Нет данных для сохранения");
+
+            // Убеждаемся, что таблица Расчеты существует
+            EnsureCalculationsTableExists();
+
+            int savedCount = 0;
+
+            try
+            {
+                using (var connection = new SQLiteConnection(_connectionString))
+                {
+                    connection.Open();
+
+                    // Начинаем транзакцию для повышения производительности
+                    using (var transaction = connection.BeginTransaction())
+                    {
+                        var insertQuery = @"
+                    INSERT INTO Расчеты 
+                    (FK_металла, Год, Широта, Долгота, Концентрация, Расстояние_от_источника, Дата_расчета) 
+                    VALUES 
+                    (@metalId, @year, @lat, @lon, @concentration, @distance, @date)";
+
+                        using (var command = new SQLiteCommand(insertQuery, connection, transaction))
+                        {
+                            // Подготавливаем параметры
+                            command.Parameters.Add("@metalId", System.Data.DbType.Int32);
+                            command.Parameters.Add("@year", System.Data.DbType.Int32);
+                            command.Parameters.Add("@lat", System.Data.DbType.Double);
+                            command.Parameters.Add("@lon", System.Data.DbType.Double);
+                            command.Parameters.Add("@concentration", System.Data.DbType.Double);
+                            command.Parameters.Add("@distance", System.Data.DbType.Double);
+                            command.Parameters.Add("@date", System.Data.DbType.DateTime);
+
+                            foreach (var point in gridPoints)
+                            {
+                                command.Parameters["@metalId"].Value = metalId;
+                                command.Parameters["@year"].Value = year;
+                                command.Parameters["@lat"].Value = point.Lat;
+                                command.Parameters["@lon"].Value = point.Lon;
+                                command.Parameters["@concentration"].Value = point.Concentration;
+                                command.Parameters["@distance"].Value = point.DistanceFromSource;
+                                command.Parameters["@date"].Value = DateTime.Now;
+
+                                command.ExecuteNonQuery();
+                                savedCount++;
+                            }
+                        }
+
+                        transaction.Commit();
+                    }
+                }
+
+                Console.WriteLine($"Успешно сохранено {savedCount} записей в таблицу Расчеты");
+                return savedCount;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Ошибка при сохранении данных в БД: {ex.Message}", ex);
+            }
         }
         public bool UpdateSample(Sample sample)
         {
@@ -63,6 +234,8 @@ namespace TESTDIP.DataBase
                 return false;
             }
         }
+
+      
 
         public bool DeleteSample(int sampleId)
         {
@@ -377,7 +550,7 @@ namespace TESTDIP.DataBase
             }
             return metals;
         }
-        
+
         public List<Location> GetLocationss()
         {
             var locations = new List<Location>();
@@ -521,6 +694,192 @@ namespace TESTDIP.DataBase
                 return 0.0;
             }
         }
+        public List<CalculationResultSummary> GetCalculationResultsSummary()
+        {
+            var results = new List<CalculationResultSummary>();
 
+            try
+            {
+                using (var connection = new SQLiteConnection(_connectionString))
+                {
+                    connection.Open();
+                    var query = @"
+                        SELECT 
+                            r.FK_металла as MetalId,
+                            m.Название as MetalName,
+                            r.Год as Year,
+                            r.Дата_расчета as CalculationDate,
+                            COUNT(*) as PointCount,
+                            MIN(r.Концентрация) as MinConcentration,
+                            MAX(r.Концентрация) as MaxConcentration,
+                            AVG(r.Концентрация) as AvgConcentration,
+                            MAX(r.Расстояние_от_источника) as MaxDistance,
+                            MIN(r.ID) as Id
+                        FROM Расчеты r
+                        INNER JOIN Металлы m ON r.FK_металла = m.ID
+                        GROUP BY r.FK_металла, r.Год, DATE(r.Дата_расчета)
+                        ORDER BY r.Дата_расчета DESC";
+
+                    using (var command = new SQLiteCommand(query, connection))
+                    using (var reader = command.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            results.Add(new CalculationResultSummary
+                            {
+                                Id = reader.GetInt32("Id"),
+                                MetalId = reader.GetInt32("MetalId"),
+                                MetalName = reader.GetString("MetalName"),
+                                Year = reader.GetInt32("Year"),
+                                CalculationDate = reader.GetDateTime("CalculationDate"),
+                                PointCount = reader.GetInt32("PointCount"),
+                                MinConcentration = reader.GetDouble("MinConcentration"),
+                                MaxConcentration = reader.GetDouble("MaxConcentration"),
+                                AvgConcentration = reader.GetDouble("AvgConcentration"),
+                                MaxDistance = reader.IsDBNull("MaxDistance") ? 0 : reader.GetDouble("MaxDistance")
+                            });
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Ошибка при получении сводки результатов: {ex.Message}", ex);
+            }
+
+            return results;
+        }
+
+        /// <summary>
+        /// Получение детальных данных расчета
+        /// </summary>
+        public List<GridPoint> GetCalculationDetails(int calculationId)
+        {
+            var results = new List<GridPoint>();
+
+            try
+            {
+                using (var connection = new SQLiteConnection(_connectionString))
+                {
+                    connection.Open();
+                    var query = @"
+                        SELECT Широта, Долгота, Концентрация, Расстояние_от_источника 
+                        FROM Расчеты 
+                        WHERE FK_металла = (SELECT FK_металла FROM Расчеты WHERE ID = @calculationId LIMIT 1)
+                        AND Год = (SELECT Год FROM Расчеты WHERE ID = @calculationId LIMIT 1)
+                        AND DATE(Дата_расчета) = (SELECT DATE(Дата_расчета) FROM Расчеты WHERE ID = @calculationId LIMIT 1)
+                        ORDER BY Расстояние_от_источника";
+
+                    using (var command = new SQLiteCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@calculationId", calculationId);
+
+                        using (var reader = command.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                results.Add(new GridPoint
+                                {
+                                    Lat = reader.GetDouble("Широта"),
+                                    Lon = reader.GetDouble("Долгота"),
+                                    Concentration = reader.GetDouble("Концентрация"),
+                                    DistanceFromSource = reader.IsDBNull("Расстояние_от_источника") ? 0 : reader.GetDouble("Расстояние_от_источника")
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Ошибка при получении деталей расчета: {ex.Message}", ex);
+            }
+
+            return results;
+        }
+
+        /// <summary>
+        /// Получение списка годов для которых есть расчеты
+        /// </summary>
+        public List<int> GetCalculationYears()
+        {
+            var years = new List<int>();
+
+            try
+            {
+                using (var connection = new SQLiteConnection(_connectionString))
+                {
+                    connection.Open();
+                    var query = "SELECT DISTINCT Год FROM Расчеты ORDER BY Год DESC";
+
+                    using (var command = new SQLiteCommand(query, connection))
+                    using (var reader = command.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            years.Add(reader.GetInt32("Год"));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Ошибка при получении списка годов: {ex.Message}", ex);
+            }
+
+            return years;
+        }
+        public bool DeleteCalculationResult(int calculationId)
+        {
+            try
+            {
+                using (var connection = new SQLiteConnection(_connectionString))
+                {
+                    connection.Open();
+                    var getParamsQuery = @"
+                        SELECT FK_металла, Год, DATE(Дата_расчета) as CalcDate 
+                        FROM Расчеты 
+                        WHERE ID = @calculationId";
+
+                    int metalId;
+                    int year;
+                    string calcDate;
+
+                    using (var command = new SQLiteCommand(getParamsQuery, connection))
+                    {
+                        command.Parameters.AddWithValue("@calculationId", calculationId);
+                        using (var reader = command.ExecuteReader())
+                        {
+                            if (!reader.Read())
+                                return false;
+
+                            metalId = reader.GetInt32("FK_металла");
+                            year = reader.GetInt32("Год");
+                            calcDate = reader.GetString("CalcDate");
+                        }
+                    }
+
+                    // Удаляем все записи этого расчета
+                    var deleteQuery = @"
+                        DELETE FROM Расчеты 
+                        WHERE FK_металла = @metalId 
+                        AND Год = @year 
+                        AND DATE(Дата_расчета) = @calcDate";
+
+                    using (var command = new SQLiteCommand(deleteQuery, connection))
+                    {
+                        command.Parameters.AddWithValue("@metalId", metalId);
+                        command.Parameters.AddWithValue("@year", year);
+                        command.Parameters.AddWithValue("@calcDate", calcDate);
+
+                        return command.ExecuteNonQuery() > 0;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Ошибка при удалении результата расчета: {ex.Message}", ex);
+            }
+        }
     }
 }

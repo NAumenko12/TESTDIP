@@ -3,7 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:TESTDIP.View" xmlns:System="clr-namespace:System;assembly=mscorlib"
+        xmlns:local="clr-namespace:TESTDIP.View" xmlns:System="clr-namespace:System;assembly=mscorlib" xmlns:viewmodels="clr-namespace:TESTDIP.ViewModels" 
+        d:DataContext="{d:DesignInstance Type=viewmodels:AddSampleViewModel}"
         mc:Ignorable="d"
          Height="713" Width="800">
     <Grid Margin="15">
@@ -32,34 +33,35 @@
         </Border>
 
         <TextBlock Text="Металл:" Grid.Row="2" VerticalAlignment="Bottom"/>
-        <ComboBox x:Name="MetalComboBox" Grid.Row="3"
-                DisplayMemberPath="Name" SelectedValuePath="Id"
-                VerticalContentAlignment="Center"/>
-
+        <ComboBox Grid.Row="3" ItemsSource="{Binding Metals}" 
+              SelectedItem="{Binding SelectedMetal}"
+              DisplayMemberPath="Name" VerticalContentAlignment="Center"/>
+        
         <TextBlock Text="Значение:" Grid.Row="4" VerticalAlignment="Bottom"/>
-        <TextBox x:Name="ValueTextBox" Grid.Row="5" VerticalContentAlignment="Center"/>
+        <TextBox Grid.Row="5" Text="{Binding Value}" VerticalContentAlignment="Center"/>
 
         <TextBlock Text="Вид пробы:" Grid.Row="6" VerticalAlignment="Bottom"/>
-        <TextBox x:Name="TypeTextBox" Grid.Row="7" VerticalContentAlignment="Center"/>
+        <TextBox Grid.Row="7" Text="{Binding Type}" VerticalContentAlignment="Center"/>
 
         <TextBlock Text="Фракция:" Grid.Row="8" VerticalAlignment="Bottom"/>
-        <TextBox x:Name="FractionTextBox" Grid.Row="9" VerticalContentAlignment="Center"/>
+        <TextBox Grid.Row="9" Text="{Binding Fraction}" VerticalContentAlignment="Center"/>
 
         <TextBlock Text="Повторность:" Grid.Row="10" VerticalAlignment="Bottom"/>
-        <TextBox x:Name="RepetitionTextBox" Grid.Row="11" VerticalContentAlignment="Center"/>
+        <TextBox Grid.Row="11" Text="{Binding Repetition}" VerticalContentAlignment="Center"/>
 
         <TextBlock Text="Дата отбора:" Grid.Row="12" VerticalAlignment="Bottom"/>
-        <DatePicker x:Name="SamplingDatePicker" Grid.Row="13" 
-                   SelectedDate="{x:Static System:DateTime.Today}"
-                   VerticalContentAlignment="Center"/>
+        <DatePicker Grid.Row="13" SelectedDate="{Binding SamplingDate}" 
+                VerticalContentAlignment="Center"/>
 
         <TextBlock Text="Номер аналитики:" Grid.Row="14" VerticalAlignment="Bottom"/>
-        <TextBox x:Name="AnalyticsNumberTextBox" Grid.Row="15" VerticalContentAlignment="Center"/>
+        <TextBox Grid.Row="15" Text="{Binding AnalyticsNumber}" VerticalContentAlignment="Center"/>
 
         <StackPanel Grid.Row="16" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-            <Button Content="Отмена" Width="120" Height="30" Margin="0,0,15,0" Click="Cancel_Click"/>
-            <Button Content="Сохранить" Width="120" Height="30" Click="Save_Click" IsDefault="True"/>
-            
+            <Button Content="Отмена" Width="120" Height="30" Margin="0,0,15,0" 
+                Command="{Binding CancelCommand}"/>
+            <Button Content="Сохранить" Width="120" Height="30" 
+                Command="{Binding SaveCommand}" IsDefault="True"/>
+
         </StackPanel>
     </Grid>
 </Window>

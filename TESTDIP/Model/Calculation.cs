@@ -13,7 +13,7 @@ namespace TESTDIP.Model
         public int Year { get; set; }
         public double Longitude { get; set; }
         public double Latitude { get; set; }
-        public string Concentration { get; set; }
+        public double Concentration { get; set; }
         public DateTime CalculationDate { get; set; }
 
         public required Metal Metal { get; set; }

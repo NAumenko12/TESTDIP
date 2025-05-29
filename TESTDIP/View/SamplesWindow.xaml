@@ -3,9 +3,12 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:TESTDIP" xmlns:viewmodels="clr-namespace:TESTDIP.ViewModels" d:DataContext="{d:DesignInstance Type=viewmodels:BaseViewModel}"
+        xmlns:local="clr-namespace:TESTDIP" xmlns:viewmodels="clr-namespace:TESTDIP.ViewModels" 
+        xmlns:viewmodels1="clr-namespace:TESTDIP.ViewModel" d:DataContext="{d:DesignInstance Type=viewmodels1:SamplesViewModel}"
         mc:Ignorable="d"
          Height="450" Width="800">
+    
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -25,20 +28,23 @@
         <!-- Панель фильтров -->
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="10" VerticalAlignment="Center">
             <TextBlock Text="Фильтр по металлу:" VerticalAlignment="Center" Margin="0,0,5,0"/>
-            <ComboBox x:Name="MetalFilterComboBox" Width="150" Margin="0,0,20,0"
-                  DisplayMemberPath="Name" SelectedValuePath="Id"
-                  SelectionChanged="Filter_SelectionChanged"/>
+            <ComboBox ItemsSource="{Binding MetalsFilter}" 
+                      SelectedItem="{Binding SelectedMetalFilter}"
+                      DisplayMemberPath="Name" 
+                      Width="150" Margin="0,0,20,0"/>
 
             <TextBlock Text="Фильтр по году:" VerticalAlignment="Center" Margin="0,0,5,0"/>
-            <ComboBox x:Name="YearFilterComboBox" Width="100" Margin="0,0,20,0"
-                  SelectionChanged="Filter_SelectionChanged"/>
+            <ComboBox ItemsSource="{Binding YearsFilter}" 
+                      SelectedItem="{Binding SelectedYearFilter}"
+                      Width="100" Margin="0,0,20,0"/>
         </StackPanel>
 
         <!-- Таблица с пробами -->
-        <DataGrid x:Name="SamplesDataGrid" Grid.Row="2" Margin="10" 
-              AutoGenerateColumns="False" 
-              ItemsSource="{Binding FilteredSamples}" 
-              SelectionMode="Single">
+        <DataGrid Grid.Row="2" Margin="10" 
+                  AutoGenerateColumns="False" 
+                  ItemsSource="{Binding FilteredSamples}" 
+                  SelectedItem="{Binding SelectedSample}"
+                  SelectionMode="Single">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Металл" Binding="{Binding Metal.Name}" Width="100"/>
                 <DataGridTextColumn Header="Значение" Binding="{Binding Value}" Width="100"/>
@@ -51,11 +57,17 @@
             </DataGrid.Columns>
         </DataGrid>
 
+        <!-- Панель кнопок -->
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="10">
-            <Button Content="Добавить пробу" Width="120" Margin="0,0,10,0" Click="AddSample_Click"/>
-            <Button Content="Изменить" Width="80" Click="EditSample_Click" Margin="0,0,10,0"/>
-            <Button Content="Удалить" Width="80" Click="DeleteSample_Click" Margin="0,0,10,0"/>
-            <Button Content="Закрыть" Width="80" Click="Close_Click"/>
+            <Button Content="Добавить пробу" Width="120" Margin="0,0,10,0" 
+                    Command="{Binding AddSampleCommand}"/>
+            <Button Content="Изменить" Width="80" 
+                    Command="{Binding EditSampleCommand}" Margin="0,0,10,0"/>
+            <Button Content="Удалить" Width="80" 
+                    Command="{Binding DeleteSampleCommand}" Margin="0,0,10,0"/>
+            <Button Content="Закрыть" Width="80" 
+                    Command="{Binding CloseCommand}"/>
         </StackPanel>
     </Grid>
 </Window>
+

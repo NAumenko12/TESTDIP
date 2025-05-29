@@ -6,13 +6,13 @@
         xmlns:local="clr-namespace:TESTDIP" xmlns:gmap="clr-namespace:GMap.NET.WindowsPresentation;assembly=GMap.NET.WindowsPresentation"
         mc:Ignorable="d"
          Height="950" Width="1600">
-    <Grid Margin="0,10,0,0">
+    <Grid>
 
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
-        <gmap:GMapControl x:Name="MapControl" Grid.Column="0" Margin="0,10,0,0" />
+        <gmap:GMapControl x:Name="MapControl" Grid.Column="0" />
         <Grid x:Name="LegendGrid" 
           HorizontalAlignment="Left" 
           VerticalAlignment="Top"
@@ -22,17 +22,12 @@
             <Button x:Name="AddPointButton" Content="Добавить точку" Width="150" Margin="0,0,0,10" Click="AddPointButton_Click"/>
 
             <Button x:Name="GoToStatsButton" Content="Перейти к статистике" Width="150" Margin="0,0,0,10" Click="GoToStatsButton_Click"/>
-            <Button x:Name="ExportButton" Content="Экспорт карты" Width="150" Margin="0,0,0,10" Click="ExportButton_Click"/>
+            <Button x:Name="ViewAllCalculationResultsButton" HorizontalAlignment="Center" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Content="     Данные расчетов &#xD;&#xA;       за весь период" Width="156" Margin="0,0,0,10" Click="ViewAllCalculationResultsButton_Click" Height="44"/>
+            <Button x:Name="ExportButton" Content="Экспорт карты PNG" Width="150" Margin="0,0,0,10" Click="ExportButton_Click"/>
+            <Button x:Name="ShowCalculationDataBtn" Content="Данные текущего расчета"  Click="ShowCalculationDataBtn_Click"  IsEnabled="{Binding HasCalculationData}" Width="150" Margin="0,0,0,10"/>
             <Button x:Name="CalculateButton" Content="Рассчитать" Width="150" Margin="0,0,0,10" Click="CalculateButton_Click" />
-            <Button x:Name="ResetButton" Content="Сбросить отрисовку" Click="ResetButton_Click" Margin="5"/>
-            <Button x:Name="LoadWindRoseButton" 
-        Content="Загрузить розу ветров" 
-        Click="LoadWindRoseButton_Click"
-        Margin="5"
-        Padding="10,5"
-        ToolTip="Загрузить данные розы ветров из CSV-файла"/>
+            <Button x:Name="ResetButton" Content="Сбросить Рассчет" Click="ResetButton_Click" Margin="5"/>
         </StackPanel>
-        
 
     </Grid>
 </Window>

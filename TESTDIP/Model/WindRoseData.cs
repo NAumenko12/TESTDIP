@@ -3,46 +3,33 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using TESTDIP.DataBase;
+using WeatherDataParser;
 
 namespace TESTDIP.Model
 {
-    public class WindRoseData
+    class WindRoseData
     {
-     
-        public List<double> DirectionProbabilities { get; set; }
-
-        public WindRoseData()
+        private Statistics _statistics;
+        private Dictionary<decimal, decimal> windRose;
+        private decimal[] windRoseArray;
+        private readonly DatabaseHelper _dbHelper;
+        public WindRoseData(DatabaseHelper dbHelper)
         {
-            DirectionProbabilities = new List<double>
-            {
-                0.15, // С
-                0.10, // СВ
-                0.20, // В
-                0.10, // ЮВ
-                0.05, // Ю
-                0.10, // ЮЗ
-                0.25, // З
-                0.05  // СЗ
-            };
-        }
-        public double GetProbabilityForAngle(double angleRadians)
-        {
-            int N = DirectionProbabilities.Count;
-            double sectorSize = 2 * Math.PI / N;
+            _dbHelper = dbHelper;
 
-            
-            while (angleRadians < 0) angleRadians += 2 * Math.PI;
-            while (angleRadians >= 2 * Math.PI) angleRadians -= 2 * Math.PI;
+            string connectionString = @"Data Source=""C:\Users\natac\OneDrive\Рабочий стол\АналитикаПогода\WeatherAnalitycs\bin\Debug\net8.0-windows7.0\WeatherDatabases"";Foreign Keys=True";
 
-           
-            int i = (int)(angleRadians / sectorSize);
-            if (i >= N) i = 0; 
 
-            int i_next = (i + 1) % N;
+            _statistics = new Statistics(
+                new DateTime(2020, 1, 04),
+                new DateTime(2020, 4, 09),
+                22212,
+                connectionString
+            );
 
-            double factor = (angleRadians - i * sectorSize) / sectorSize;
-
-            return DirectionProbabilities[i] + factor * (DirectionProbabilities[i_next] - DirectionProbabilities[i]);
+            windRose = _statistics.GetPercentageWindRose(false, 16);
+            windRoseArray = windRose.Values.ToArray();
         }
     }
 }

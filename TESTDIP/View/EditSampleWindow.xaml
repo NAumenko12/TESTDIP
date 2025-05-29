@@ -5,9 +5,22 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:TESTDIP.View"
         mc:Ignorable="d"
-        Title="EditSampleWindow" Height="450" Width="800">
-    <Grid Margin="10">
+        Title="Редактирование пробы" 
+        Height="800" 
+        Width="800"
+        WindowStartupLocation="CenterScreen">
+
+    <Grid Margin="15">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -19,30 +32,134 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Text="Металл:" Grid.Row="0"/>
-        <TextBlock Text="{Binding EditedSample.Metal.Name}" Grid.Row="0" Margin="100,0,0,0"/>
+        <!-- Металл -->
+        <TextBlock Text="Металл:" 
+                   Grid.Row="0" 
+                   VerticalAlignment="Center" 
+                   FontWeight="Bold"/>
 
-        <TextBlock Text="Значение:" Grid.Row="1"/>
-        <TextBox Text="{Binding EditedSample.Value}" Grid.Row="1" Margin="100,0,0,0"/>
+        <Border Grid.Row="1" 
+                BorderBrush="LightGray" 
+                BorderThickness="1" 
+                Padding="5" 
+                Margin="0,5">
+            <TextBlock Text="{Binding EditedSample.Metal.Name}" 
+                       VerticalAlignment="Center" 
+                       FontSize="14"/>
+        </Border>
 
-        <TextBlock Text="Дата отбора:" Grid.Row="2"/>
-        <DatePicker SelectedDate="{Binding EditedSample.SamplingDate}" Grid.Row="2" Margin="100,0,0,0"/>
+        <!-- Значение -->
+        <TextBlock Text="Значение:" 
+                   Grid.Row="2" 
+                   VerticalAlignment="Center" 
+                   Margin="0,10"/>
 
-        <TextBlock Text="Номер аналитики:" Grid.Row="3"/>
-        <TextBox Text="{Binding EditedSample.AnalyticsNumber}" Grid.Row="3" Margin="100,0,0,0"/>
+        <Border Grid.Row="3" 
+                BorderBrush="LightGray" 
+                BorderThickness="1" 
+                Padding="5" 
+                Margin="0,5">
+            <TextBox Text="{Binding EditedSample.Value, UpdateSourceTrigger=PropertyChanged}" 
+                     VerticalContentAlignment="Center" 
+                     BorderThickness="0"/>
+        </Border>
 
-        <TextBlock Text="Вид:" Grid.Row="4"/>
-        <TextBox Text="{Binding EditedSample.Type}" Grid.Row="4" Margin="100,0,0,0"/>
+        <!-- Дата отбора -->
+        <TextBlock Text="Дата отбора:" 
+                   Grid.Row="4" 
+                   VerticalAlignment="Center" 
+                   Margin="0,10"/>
 
-        <TextBlock Text="Фракция:" Grid.Row="5"/>
-        <TextBox Text="{Binding EditedSample.Fraction}" Grid.Row="5" Margin="100,0,0,0"/>
+        <Border Grid.Row="5" 
+                BorderBrush="LightGray" 
+                BorderThickness="1" 
+                Padding="5" 
+                Margin="0,5">
+            <DatePicker SelectedDate="{Binding EditedSample.SamplingDate, UpdateSourceTrigger=PropertyChanged}"
+                        VerticalContentAlignment="Center"
+                        BorderThickness="0"/>
+        </Border>
 
-        <TextBlock Text="Повторность:" Grid.Row="6"/>
-        <TextBox Text="{Binding EditedSample.Repetition}" Grid.Row="6" Margin="100,0,0,0"/>
+        <!-- Номер аналитики -->
+        <TextBlock Text="Номер аналитики:" 
+                   Grid.Row="6" 
+                   VerticalAlignment="Center" 
+                   Margin="0,10"/>
 
-        <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Content="Сохранить" Width="80" Margin="0,0,10,0" Click="Save_Click"/>
-            <Button Content="Отмена" Width="80" Click="Cancel_Click"/>
+        <Border Grid.Row="7" 
+                BorderBrush="LightGray" 
+                BorderThickness="1" 
+                Padding="5" 
+                Margin="0,5">
+            <TextBox Text="{Binding EditedSample.AnalyticsNumber, UpdateSourceTrigger=PropertyChanged}" 
+                     VerticalContentAlignment="Center" 
+                     BorderThickness="0"/>
+        </Border>
+
+        <!-- Вид -->
+        <TextBlock Text="Вид:" 
+                   Grid.Row="8" 
+                   VerticalAlignment="Center" 
+                   Margin="0,10"/>
+
+        <Border Grid.Row="9" 
+                BorderBrush="LightGray" 
+                BorderThickness="1" 
+                Padding="5" 
+                Margin="0,5">
+            <TextBox Text="{Binding EditedSample.Type, UpdateSourceTrigger=PropertyChanged}" 
+                     VerticalContentAlignment="Center" 
+                     BorderThickness="0"/>
+        </Border>
+
+        <!-- Фракция -->
+        <TextBlock Text="Фракция:" 
+                   Grid.Row="10" 
+                   VerticalAlignment="Center" 
+                   Margin="0,10"/>
+
+        <Border Grid.Row="11" 
+                BorderBrush="LightGray" 
+                BorderThickness="1" 
+                Padding="5" 
+                Margin="0,5">
+            <TextBox Text="{Binding EditedSample.Fraction, UpdateSourceTrigger=PropertyChanged}" 
+                     VerticalContentAlignment="Center" 
+                     BorderThickness="0"/>
+        </Border>
+
+        <!-- Повторность -->
+        <TextBlock Text="Повторность:" 
+                   Grid.Row="12" 
+                   VerticalAlignment="Center" 
+                   Margin="0,10"/>
+
+        <Border Grid.Row="13" 
+                BorderBrush="LightGray" 
+                BorderThickness="1" 
+                Padding="5" 
+                Margin="0,5">
+            <TextBox Text="{Binding EditedSample.Repetition, UpdateSourceTrigger=PropertyChanged}" 
+                     VerticalContentAlignment="Center" 
+                     BorderThickness="0"/>
+        </Border>
+
+        <!-- Кнопки -->
+        <StackPanel Grid.Row="16" 
+                    Orientation="Horizontal" 
+                    HorizontalAlignment="Right" 
+                    VerticalAlignment="Bottom" 
+                    Margin="0,20">
+            <Button Content="Отмена" 
+                    Width="120" 
+                    Height="30" 
+                    Margin="0,0,15,0" 
+                    Command="{Binding CancelCommand}"/>
+            <Button Content="Сохранить" 
+                    Width="120" 
+                    Height="30" 
+                    Command="{Binding SaveCommand}" 
+                    IsDefault="True"/>
         </StackPanel>
     </Grid>
 </Window>

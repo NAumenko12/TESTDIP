@@ -12,6 +12,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using TESTDIP.Model;
+using TESTDIP.ViewModel;
 
 namespace TESTDIP.View
 {
@@ -20,36 +21,18 @@ namespace TESTDIP.View
     /// </summary>
     public partial class EditSampleWindow : Window
     {
-        public Sample EditedSample { get; private set; }
-
         public EditSampleWindow(Sample sampleToEdit)
         {
             InitializeComponent();
-            EditedSample = new Sample
+            var viewModel = new EditSampleViewModel(sampleToEdit);
+            viewModel.RequestClose += (sender, result) =>
             {
-                Id = sampleToEdit.Id,
-                Metal = sampleToEdit.Metal,
-                Value = sampleToEdit.Value,
-                SamplingDate = sampleToEdit.SamplingDate,
-                AnalyticsNumber = sampleToEdit.AnalyticsNumber,
-                Type = sampleToEdit.Type,
-                Fraction = sampleToEdit.Fraction,
-                Repetition = sampleToEdit.Repetition
+                DialogResult = result;
+                Close();
             };
-
-            DataContext = this;
+            DataContext = viewModel;
         }
 
-        private void Save_Click(object sender, RoutedEventArgs e)
-        {
-            DialogResult = true;
-            Close();
-        }
-
-        private void Cancel_Click(object sender, RoutedEventArgs e)
-        {
-            DialogResult = false;
-            Close();
-        }
+        public Sample EditedSample => (DataContext as EditSampleViewModel)?.EditedSample;
     }
 }

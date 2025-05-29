@@ -17,7 +17,6 @@ using TESTDIP.DataBase;
 using TESTDIP.View;
 using System.IO;
 using TESTDIP.ViewModel;
-using System.Windows.Threading;
 
 namespace TESTDIP;
 
@@ -28,33 +27,28 @@ public partial class MainWindow : Window
     private readonly List<GMapPolygon> _pollutionPolygons = new List<GMapPolygon>();
     private readonly DatabaseHelper _dbHelper = new DatabaseHelper();
     private GMapMarker _plantMarker;
+    private Metal _lastUsedMetal;
+    private int _lastUsedYear;
+    private List<GridPoint> _lastCalculationResults = new List<GridPoint>();
 
     public MainWindow()
     {
         InitializeComponent();
         InitializeMap();
-        AddPlantMarker();
         LoadLocations();
-
-        // Задержка для инициализации карты
-        Dispatcher.BeginInvoke(new Action(() =>
-        {
-            MapControl.Position = ReferencePoint;
-            MapControl.Zoom = 14; 
-        }), DispatcherPriority.Loaded);
+        AddPlantMarker();
     }
 
     private void InitializeMap()
     {
         MapControl.MapProvider = GMapProviders.GoogleMap;
+        MapControl.Position = ReferencePoint;
         MapControl.MinZoom = 2;
         MapControl.MaxZoom = 18;
-        MapControl.Zoom = 10; 
+        MapControl.Zoom = 10;
+        MapControl.MouseWheelZoomType = MouseWheelZoomType.MousePositionAndCenter;
         MapControl.CanDragMap = true;
         MapControl.MouseDown += MapControl_MouseDown;
-
-        MapControl.Position = ReferencePoint;
-        MapControl.Zoom = 12; 
     }
 
     private void AddPlantMarker()
@@ -85,73 +79,50 @@ public partial class MainWindow : Window
 
     private void UpdateMap(List<Location> locations)
     {
-        try
-        {
-            MapControl.Markers.Clear();
-            if (_plantMarker != null)
-            {
-                MapControl.Markers.Add(_plantMarker);
-            }
-            foreach (var location in locations)
-            {
-                if (location == null) continue;
+        var plantMarker = MapControl.Markers.FirstOrDefault(m => m == _plantMarker);
+        var markersToKeep = MapControl.Markers.OfType<GMapPolygon>().ToList();
 
-                var marker = new GMapMarker(new PointLatLng(location.Latitude, location.Longitude))
+        MapControl.Markers.Clear();
+
+        foreach (var polygon in markersToKeep)
+        {
+            MapControl.Markers.Add(polygon);
+        }
+        if (plantMarker != null)
+        {
+            MapControl.Markers.Add(plantMarker);
+        }
+
+        foreach (var location in locations)
+        {
+            var marker = new GMapMarker(new PointLatLng(location.Latitude, location.Longitude))
+            {
+                Shape = new System.Windows.Shapes.Ellipse
                 {
-                    Shape = new Ellipse
-                    {
-                        Fill = GetDistanceColor(location),
-                        Width = 10,
-                        Height = 10,
-                        Stroke = Brushes.Black,
-                        StrokeThickness = 1
-                    },
-                    Tag = location
-                };
+                    Fill = GetDistanceColor(location),
+                    Width = 10,
+                    Height = 10,
+                    Stroke = Brushes.Black,
+                    StrokeThickness = 1
+                },
+                Tag = location
+            };
 
-                ToolTipService.SetToolTip(marker.Shape, location.SiteNumber);
-                MapControl.Markers.Add(marker);
-            }
-            if (MapControl.Markers.Count > 0)
-            {
-                var rect = GetMarkersBoundingBox();
-                MapControl.SetZoomToFitRect(rect);
-            }
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Ошибка обновления карты: {ex.Message}");
-        }
-    }
-    private RectLatLng GetMarkersBoundingBox()
-    {
-        double minLat = double.MaxValue;
-        double maxLat = double.MinValue;
-        double minLon = double.MaxValue;
-        double maxLon = double.MinValue;
+            ToolTipService.SetToolTip(marker.Shape, location.SiteNumber);
 
-        foreach (var marker in MapControl.Markers)
-        {
-            if (marker.Position.Lat < minLat) minLat = marker.Position.Lat;
-            if (marker.Position.Lat > maxLat) maxLat = marker.Position.Lat;
-            if (marker.Position.Lng < minLon) minLon = marker.Position.Lng;
-            if (marker.Position.Lng > maxLon) maxLon = marker.Position.Lng;
+            MapControl.Markers.Add(marker);
         }
 
-        // Добавляем небольшую буферную зону
-        const double buffer = 0.01; // ~1 км
-        return new RectLatLng(
-            maxLat + buffer,
-            minLon - buffer,
-            (maxLon - minLon) + 2 * buffer,
-            (maxLat - minLat) + 2 * buffer
-        );
+        MapControl.ZoomAndCenterMarkers(null);
     }
 
     private Brush GetDistanceColor(Location location)
     {
         double distance = CalculateDistance(ReferencePoint,
             new PointLatLng(location.Latitude, location.Longitude));
+
+        if (distance <= 4)
+            return Brushes.Transparent;
 
         return distance <= 10 ? Brushes.Red :
                distance <= 40 ? Brushes.Orange :
@@ -220,56 +191,25 @@ public partial class MainWindow : Window
             var dialog = new CalculateDialog(_dbHelper, ReferencePoint);
             if (dialog.ShowDialog() == true)
             {
-                if (dialog.SelectedLocation == null)
-                {
-                    MessageBox.Show("Не выбрана опорная точка");
-                    return;
-                }
-
-                if (dialog.SelectedMetal == null)
-                {
-                    MessageBox.Show("Не выбран металл");
-                    return;
-                }
-
                 CalculateAndDrawPollutionField(
                     dialog.SelectedLocation,
                     dialog.SelectedMetal,
-                    dialog.SelectedYear);
+                    dialog.SelectedYear,
+                    dialog.UseWindRose);
             }
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Ошибка при открытии диалога расчета: {ex.Message}");
+            MessageBox.Show($"Ошибка: {ex.Message}");
         }
     }
-    private void LoadWindRoseButton_Click(object sender, RoutedEventArgs e)
+
+
+    private void CalculateAndDrawPollutionField(Location referencePoint, Metal metal, int year, bool useWindRose)
     {
-        try
-        {
-            var openFileDialog = new Microsoft.Win32.OpenFileDialog
-            {
-                Filter = "CSV файлы (*.csv)|*.csv|Все файлы (*.*)|*.*",
-                Title = "Выберите файл с данными розы ветров"
-            };
+        _lastUsedMetal = metal;
+        _lastUsedYear = year;
 
-            if (openFileDialog.ShowDialog() == true)
-            {
-                var windRose = WindRoseLoader.LoadFromFile(openFileDialog.FileName);
-                _windRoseData = windRose;
-
-                MessageBox.Show("Данные розы ветров успешно загружены!");
-            }
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Ошибка загрузки розы ветров: {ex.Message}");
-        }
-    }
-    private WindRoseData _windRoseData = new WindRoseData();
-
-    private void CalculateAndDrawPollutionField(Location referencePoint, Metal metal, int year)
-    {
         try
         {
             if (referencePoint == null)
@@ -283,100 +223,167 @@ public partial class MainWindow : Window
                 MessageBox.Show("Не выбран металл");
                 return;
             }
-            ClearConcentrationFields();
-            var calculator = new ConcentrationCalculator(_dbHelper);
-            if (_windRoseData != null)
-            {
-                calculator.SetWindRoseData(_windRoseData);
-            }
-            var grid = calculator.CalculateField(
-                ReferencePoint,
-                referencePoint,
-                metal,
-                year,
-                gridStepKm: 0.5, 
-                areaSizeKm: 200.0);
-            if (grid == null || grid.Count == 0)
-            {
-                MessageBox.Show("Нет данных для построения поля. Проверьте:\n" +
-                              "1. Наличие данных для выбранного года и металла\n" +
-                              "2. Корректность опорной точки");
-                return;
-            }
-            double minConcentration = grid.Min(p => p.Concentration);
-            double maxConcentration = grid.Max(p => p.Concentration);
-            double avgConcentration = grid.Average(p => p.Concentration);
 
-            Console.WriteLine($"Диапазон концентраций: мин={minConcentration}, макс={maxConcentration}, средняя={avgConcentration}");
-            if (maxConcentration < 0.001)
+            ClearConcentrationFields();
+            List<GridPoint> grid;
+
+            if (useWindRose)
             {
-                MessageBox.Show("Рассчитанные концентрации слишком малы. Проверьте входные данные.");
-                return;
-            }
-            double[] levels;
-            if (maxConcentration - minConcentration < 0.1)
-            {
-                levels = new double[]
-                {
-                minConcentration,
-                minConcentration + (maxConcentration - minConcentration) * 0.2,
-                minConcentration + (maxConcentration - minConcentration) * 0.4,
-                minConcentration + (maxConcentration - minConcentration) * 0.6,
-                minConcentration + (maxConcentration - minConcentration) * 0.8,
-                maxConcentration
-                };
+                var windProfile = new WindProfileHelper().GetDefaultWindProfile16Rumbs();
+                var calculator = new PollutionDistributionModel(_dbHelper, windProfile);
+
+                grid = calculator.CalculatePollutionField(
+                    ReferencePoint,
+                    referencePoint,
+                    metal,
+                    year,
+                    gridStepKm: 1.0,
+                    areaSizeKm: 100.0);
             }
             else
             {
-                levels = new double[6];
-                for (int i = 0; i < 6; i++)
+                var calculator = new ConcentrationCalculator(_dbHelper);
+                grid = calculator.CalculateField(
+                    ReferencePoint,
+                    referencePoint,
+                    metal,
+                    year,
+                    gridStepKm: 0.7,
+                    areaSizeKm: 100.0);
+            }
+
+            _lastCalculationResults = grid ?? new List<GridPoint>();
+
+            if (grid == null || grid.Count == 0)
+            {
+                MessageBox.Show("Нет данных для построения поля. Проверьте:\n" +
+                                "1. Наличие данных для выбранного года и металла\n" +
+                                "2. Корректность опорной точки");
+                return;
+            }
+
+            if (useWindRose)
+            {
+                // ИСПОЛЬЗУЕМ НОВУЮ ФУНКЦИЮ с переменной длиной лепестков
+                CreateWindRosePetals(grid);
+            }
+            else
+            {
+                // Старая логика для обычных изолиний
+                double[] levels = new[] { 0.1, 0.5, 1.0, 2.0, 5.0 };
+                foreach (var level in levels)
                 {
-                    double factor = i / 5.0;
-                    factor = Math.Pow(factor, 0.5); 
-                    levels[i] = minConcentration + (maxConcentration - minConcentration) * factor;
+                    var contourPoints = FindContourPoints(grid, level);
+                    if (contourPoints != null && contourPoints.Count > 2)
+                    {
+                        var polygon = CreateContourPolygon(contourPoints, GetColorForLevel(level), level);
+                        _concentrationPolygons.Add(polygon);
+                        MapControl.Markers.Add(polygon);
+                    }
                 }
             }
-            for (int i = 0; i < levels.Length; i++)
-            {
-                levels[i] = Math.Round(levels[i], 3);
-            }
-            DrawHeatMap(grid, levels);
+
             ZoomToPollutionArea(grid);
-            ShowLegend(levels, metal.Name);
+            ShowWindRoseLegend(useWindRose, grid);
         }
         catch (Exception ex)
         {
             MessageBox.Show($"Ошибка при построении поля: {ex.Message}\n\nСтек вызовов: {ex.StackTrace}");
         }
     }
-    private void DrawHeatMap(List<GridPoint> grid, double[] levels)
+    private Dictionary<int, List<GridPoint>> GroupPointsBySectors(List<GridPoint> grid, double centerLat, double centerLon)
+    {
+        var sectors = new Dictionary<int, List<GridPoint>>();
+
+        foreach (var point in grid.Where(p => p.Concentration > 0.001))
+        {
+            // Вычисляем угол от центра к точке
+            double deltaLat = point.Lat - centerLat;
+            double deltaLon = point.Lon - centerLon;
+            double angleRad = Math.Atan2(deltaLon, deltaLat);
+            double angleDeg = angleRad * 180.0 / Math.PI;
+
+            // Нормализуем угол к диапазону 0-360
+            if (angleDeg < 0) angleDeg += 360;
+
+            // Определяем сектор (0-15, каждый сектор = 22.5°)
+            int sector = (int)Math.Round(angleDeg / 22.5) % 16;
+
+            if (!sectors.ContainsKey(sector))
+                sectors[sector] = new List<GridPoint>();
+
+            sectors[sector].Add(point);
+        }
+
+        return sectors;
+    }
+    private void CreateWindRosePetals(List<GridPoint> grid)
     {
         try
         {
-            
-            Console.WriteLine("Уровни концентрации:");
-            foreach (var level in levels)
+            var centerLat = ReferencePoint.Lat;
+            var centerLon = ReferencePoint.Lng;
+
+            var windProfile = new WindProfileHelper().GetDefaultWindProfile16Rumbs();
+            var sectors = GroupPointsBySectors(grid, centerLat, centerLon);
+            for (int sectorIndex = 0; sectorIndex < 16; sectorIndex++)
             {
-                Console.WriteLine($"  {level}");
+                var windDirection = windProfile[sectorIndex];
+                var sectorPoints = sectors.ContainsKey(sectorIndex) ? sectors[sectorIndex] : new List<GridPoint>();
+
+                CreateVariableLengthPetal(sectorIndex, windDirection, sectorPoints, centerLat, centerLon);
             }
 
-            
-            for (int i = levels.Length - 1; i >= 0; i--)
+            Console.WriteLine($"Создано {_concentrationPolygons.Count} лепестков розы ветров с переменной длиной");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Ошибка при создании лепестков: {ex.Message}");
+        }
+    }
+
+    private void CreateVariableLengthPetal(int sectorIndex, WindDirection windDirection,
+        List<GridPoint> sectorPoints, double centerLat, double centerLon)
+    {
+        try
+        {
+            double sectorAngle = sectorIndex * 22.5;
+            double halfSectorWidth = 11.25; 
+
+            double leftAngle = (sectorAngle - halfSectorWidth) * Math.PI / 180.0;
+            double rightAngle = (sectorAngle + halfSectorWidth) * Math.PI / 180.0;
+            double baseMaxDistance = 100.0; 
+
+            double windLengthFactor = windDirection.Weight / 0.18; 
+
+            double dataFactor = 1.0;
+            if (sectorPoints.Any())
             {
-                double level = levels[i];
+                double avgConcentration = sectorPoints.Average(p => p.Concentration);
+                double maxConcentration = sectorPoints.Max(p => p.Concentration);
+                dataFactor = 0.5 + (avgConcentration / maxConcentration) * 0.5; 
+            }
+            double maxPetalLength = baseMaxDistance * windLengthFactor * dataFactor;
+            maxPetalLength = Math.Max(5.0, maxPetalLength); 
 
-                
-                var pointsAboveLevel = grid.Where(p => p.Concentration >= level).ToList();
+            Console.WriteLine($"Сектор {sectorIndex} ({GetWindDirectionName(sectorIndex)}): " +
+                            $"Weight={windDirection.Weight:F3}, Length={maxPetalLength:F1} км");
+            for (int zone = 0; zone < 5; zone++)
+            {
+                double innerRadius = (zone * maxPetalLength) / 5.0;
+                double outerRadius = ((zone + 1) * maxPetalLength) / 5.0;
+                var zonePoints = sectorPoints
+                    .Where(p => p.DistanceFromSource >= innerRadius && p.DistanceFromSource < outerRadius)
+                    .ToList();
 
-                Console.WriteLine($"Для уровня {level} найдено {pointsAboveLevel.Count} точек");
+                double avgConcentration = zonePoints.Any() ? zonePoints.Average(p => p.Concentration) : 0.001;
 
-                if (pointsAboveLevel.Count < 3) continue;
+                var petalPoints = CreatePetalZonePoints(centerLat, centerLon, leftAngle, rightAngle, innerRadius, outerRadius);
 
-                
-                var polygons = CreateContourPolygons(pointsAboveLevel, level, levels.Min(), levels.Max());
-
-                foreach (var polygon in polygons)
+                if (petalPoints.Count > 2)
                 {
+                    var color = GetRedYellowGreenColor(zone, avgConcentration);
+                    var polygon = CreatePetalPolygon(petalPoints, color, avgConcentration, sectorIndex, zone);
                     _concentrationPolygons.Add(polygon);
                     MapControl.Markers.Add(polygon);
                 }
@@ -384,249 +391,367 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Ошибка при отрисовке тепловой карты: {ex.Message}");
+            Console.WriteLine($"Ошибка при создании лепестка сектора {sectorIndex}: {ex.Message}");
         }
     }
-    private List<GMapPolygon> CreateContourPolygons(List<GridPoint> points, double level, double minLevel, double maxLevel)
+    private Color GetRedYellowGreenColor(int zone, double concentration)
     {
-        var result = new List<GMapPolygon>();
+        
+        double normalizedZone = (double)zone / 4.0;
+        double intensity = Math.Max(0.3, Math.Min(1.0, Math.Log10(concentration * 1000 + 1) / 3.0));
 
-        try
+        byte red, green, blue;
+
+        if (normalizedZone <= 0.5)
         {
             
-            var convexHull = ComputeConvexHull(points.Select(p => new PointLatLng(p.Lat, p.Lon)).ToList());
-
-            if (convexHull.Count < 3) return result;
-
-            
-            var polygon = new GMapPolygon(convexHull)
-            {
-                Shape = new System.Windows.Shapes.Path
-                {
-                    Stroke = new System.Windows.Media.SolidColorBrush(GetColorForLevel(level, minLevel, maxLevel)),
-                    StrokeThickness = 2,
-                    Fill = new System.Windows.Media.SolidColorBrush(
-                        System.Windows.Media.Color.FromArgb(150,
-                        GetColorForLevel(level, minLevel, maxLevel).R,
-                        GetColorForLevel(level, minLevel, maxLevel).G,
-                        GetColorForLevel(level, minLevel, maxLevel).B)),
-                    ToolTip = $"Уровень {level.ToString("F3", new System.Globalization.CultureInfo("ru-RU")).TrimEnd('0').TrimEnd(',')} мг/м³"
-                },
-                Tag = level
-            };
-
-            result.Add(polygon);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Ошибка при создании полигонов: {ex.Message}");
-        }
-
-        return result;
-    }
-    private List<PointLatLng> ComputeConvexHull(List<PointLatLng> points)
-    {
-        if (points.Count < 3) return points;
-
-        
-        var p0 = points.OrderBy(p => p.Lat).ThenBy(p => p.Lng).First();
-
-        
-        var sortedPoints = points.OrderBy(p =>
-        {
-            double dx = p.Lng - p0.Lng;
-            double dy = p.Lat - p0.Lat;
-            return Math.Atan2(dy, dx);
-        }).ToList();
-
-        
-        var hull = new List<PointLatLng>();
-        hull.Add(sortedPoints[0]);
-        hull.Add(sortedPoints[1]);
-
-        for (int i = 2; i < sortedPoints.Count; i++)
-        {
-            while (hull.Count > 1 && !IsLeftTurn(hull[hull.Count - 2], hull[hull.Count - 1], sortedPoints[i]))
-            {
-                hull.RemoveAt(hull.Count - 1);
-            }
-            hull.Add(sortedPoints[i]);
-        }
-
-        return hull;
-    }
-
-    
-    private bool IsLeftTurn(PointLatLng p1, PointLatLng p2, PointLatLng p3)
-    {
-        return ((p2.Lng - p1.Lng) * (p3.Lat - p1.Lat) - (p2.Lat - p1.Lat) * (p3.Lng - p1.Lng)) > 0;
-    }
-
-    
-    private void ShowLegend(double[] levels, string metalName)
-    {
-        LegendGrid.Children.Clear();
-
-        var legendPanel = new System.Windows.Controls.StackPanel
-        {
-            Orientation = System.Windows.Controls.Orientation.Vertical,
-            Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White),
-            Margin = new System.Windows.Thickness(10),
-            Opacity = 0.9,
-            MinWidth = 200
-        };
-
- 
-        legendPanel.Children.Add(new System.Windows.Controls.TextBlock
-        {
-            Text = $"Концентрация {metalName} (мг/м³)",
-            FontWeight = System.Windows.FontWeights.Bold,
-            Margin = new System.Windows.Thickness(0, 0, 0, 10),
-            TextAlignment = System.Windows.TextAlignment.Center
-        });
-
-     
-        legendPanel.Children.Add(new System.Windows.Controls.TextBlock
-        {
-            Text = "С учетом розы ветров",
-            FontStyle = System.Windows.FontStyles.Italic,
-            Margin = new System.Windows.Thickness(0, 0, 0, 10),
-            TextAlignment = System.Windows.TextAlignment.Center
-        });
-
-       
-        foreach (var level in levels.OrderByDescending(l => l))
-        {
-            var stack = new System.Windows.Controls.StackPanel
-            {
-                Orientation = System.Windows.Controls.Orientation.Horizontal,
-                Margin = new System.Windows.Thickness(5)
-            };
-
-            stack.Children.Add(new System.Windows.Shapes.Rectangle
-            {
-                Width = 30,
-                Height = 15,
-                Fill = new System.Windows.Media.SolidColorBrush(GetColorForLevel(level, levels.Min(), levels.Max())),
-                Margin = new System.Windows.Thickness(0, 0, 10, 0),
-                StrokeThickness = 1,
-                Stroke = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Black)
-            });
-
-           
-            var culture = new System.Globalization.CultureInfo("ru-RU");
-            string formattedValue = level.ToString("F3", culture);
-
-           
-            if (formattedValue.Contains(","))
-            {
-                formattedValue = formattedValue.TrimEnd('0').TrimEnd(',');
-                if (formattedValue == "") formattedValue = "0";
-            }
-
-            stack.Children.Add(new System.Windows.Controls.TextBlock
-            {
-                Text = formattedValue,
-                VerticalAlignment = System.Windows.VerticalAlignment.Center
-            });
-
-            legendPanel.Children.Add(stack);
-        }
-
-        
-        legendPanel.Children.Add(new System.Windows.Controls.TextBlock
-        {
-            Text = $"Дата расчета: {DateTime.Now.ToShortDateString()}",
-            Margin = new System.Windows.Thickness(0, 10, 0, 0),
-            FontSize = 10,
-            TextAlignment = System.Windows.TextAlignment.Center
-        });
-
-        
-        var border = new System.Windows.Controls.Border
-        {
-            BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Black),
-            BorderThickness = new System.Windows.Thickness(1),
-            Child = legendPanel,
-            CornerRadius = new System.Windows.CornerRadius(5),
-            Padding = new System.Windows.Thickness(10),
-            Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White),
-            Effect = new System.Windows.Media.Effects.DropShadowEffect
-            {
-                ShadowDepth = 3,
-                Opacity = 0.3,
-                BlurRadius = 5
-            }
-        };
-
-        LegendGrid.Children.Add(border);
-
-        
-        System.Windows.Controls.Grid.SetColumn(border, 1);
-        System.Windows.Controls.Grid.SetRow(border, 0);
-    }
-
-    private System.Windows.Media.Color GetColorForLevel(double level, double minLevel, double maxLevel)
-    {
-        
-        double normalizedLevel = Math.Max(0, Math.Min(1, (level - minLevel) / (maxLevel - minLevel)));
-
-        if (normalizedLevel < 0.5)
-        {
-           
-            byte r = (byte)(255 * normalizedLevel * 2);
-            byte g = 255;
-            byte b = 0;
-            return System.Windows.Media.Color.FromRgb(r, g, b);
+            double t = normalizedZone * 2; 
+            red = 255;
+            green = (byte)(255 * t * intensity);
+            blue = 0;
         }
         else
         {
-           
-            byte r = 255;
-            byte g = (byte)(255 * (1 - (normalizedLevel - 0.5) * 2));
-            byte b = 0;
-            return System.Windows.Media.Color.FromRgb(r, g, b);
+            double t = (normalizedZone - 0.5) * 2; 
+            red = (byte)(255 * (1 - t) * intensity);
+            green = (byte)(255 * intensity);
+            blue = 0;
         }
+
+        return Color.FromRgb(red, green, blue);
     }
 
-    /*private static List<PointLatLng> FindContourPoints(List<GridPoint> grid, double targetLevel)
+
+    private List<PointLatLng> CreatePetalZonePoints(double centerLat, double centerLon,
+        double leftAngle, double rightAngle, double innerRadius, double outerRadius)
+    {
+        var points = new List<PointLatLng>();
+
+        double latStep = 1.0 / 110.574;
+        double lonStep = 1.0 / (111.320 * Math.Cos(centerLat * Math.PI / 180));
+
+        if (innerRadius > 0.1)
+        {
+            for (double angle = leftAngle; angle <= rightAngle; angle += 0.1)
+            {
+                double lat = centerLat + (innerRadius * latStep) * Math.Sin(angle);
+                double lon = centerLon + (innerRadius * lonStep) * Math.Cos(angle);
+                points.Add(new PointLatLng(lat, lon));
+            }
+        }
+
+        for (double angle = rightAngle; angle >= leftAngle; angle -= 0.1)
+        {
+            double lat = centerLat + (outerRadius * latStep) * Math.Sin(angle);
+            double lon = centerLon + (outerRadius * lonStep) * Math.Cos(angle);
+            points.Add(new PointLatLng(lat, lon));
+        }
+
+        if (points.Count > 0 && innerRadius > 0.1)
+        {
+            points.Add(points[0]);
+        }
+
+        return points;
+    }
+
+    private GMapPolygon CreatePetalPolygon(List<PointLatLng> points, Color color, double concentration, int sector, int zone)
+    {
+        var polygon = new GMapPolygon(points);
+
+        var gradientBrush = new RadialGradientBrush();
+
+        gradientBrush.GradientStops.Add(new GradientStop(Color.FromArgb(160, color.R, color.G, color.B), 0.0));
+        gradientBrush.GradientStops.Add(new GradientStop(Color.FromArgb(120, color.R, color.G, color.B), 0.5));
+        gradientBrush.GradientStops.Add(new GradientStop(Color.FromArgb(80, color.R, color.G, color.B), 1.0));
+
+        polygon.Shape = new System.Windows.Shapes.Path
+        {
+            Stroke = new SolidColorBrush(Color.FromArgb(120, color.R, color.G, color.B)),
+            StrokeThickness = 0.5,
+            Fill = gradientBrush,
+            ToolTip = $"Направление: {GetWindDirectionName(sector)}\n" +
+                     $"Зона: {zone + 1} (от центра)\n" +
+                     $"Концентрация: {concentration:F4} мг/м³"
+        };
+
+        polygon.Tag = new { Sector = sector, Zone = zone, Concentration = concentration };
+
+        return polygon;
+    }
+    private string GetWindDirectionName(int sector)
+    {
+        string[] directions = {
+                "С", "ССВ", "СВ", "ВСВ", "В", "ВЮВ", "ЮВ", "ЮЮВ",
+                "Ю", "ЮЮЗ", "ЮЗ", "ЗЮЗ", "З", "ЗСЗ", "СЗ", "ССЗ"
+            };
+        return directions[sector % 16];
+    }
+
+    private void ShowWindRoseLegend(bool isWindRose, List<GridPoint> grid)
+    {
+        LegendGrid.Children.Clear();
+
+        var legendPanel = new StackPanel
+        {
+            Orientation = Orientation.Vertical,
+            Background = new SolidColorBrush(Colors.White),
+            Margin = new Thickness(10),
+            Opacity = 0.9
+        };
+
+        if (isWindRose)
+        {
+            legendPanel.Children.Add(new TextBlock
+            {
+                Text = "Роза ветров - Концентрация",
+                FontWeight = FontWeights.Bold,
+                Margin = new Thickness(0, 0, 0, 5)
+            });
+
+            string[] zoneNames = { "Центр (красный)", "Зона 2", "Средняя (желтый)", "Зона 4", "Край (зеленый)" };
+
+            for (int zone = 0; zone < 5; zone++)
+            {
+                var color = GetRedYellowGreenColor(zone, 1.0); 
+
+                var stack = new StackPanel { Orientation = Orientation.Horizontal };
+
+                stack.Children.Add(new Rectangle
+                {
+                    Width = 20,
+                    Height = 10,
+                    Fill = new SolidColorBrush(color),
+                    Margin = new Thickness(0, 0, 5, 0)
+                });
+
+                stack.Children.Add(new TextBlock
+                {
+                    Text = zoneNames[zone],
+                    VerticalAlignment = VerticalAlignment.Center,
+                    FontSize = 10
+                });
+
+                legendPanel.Children.Add(stack);
+            }
+            legendPanel.Children.Add(new TextBlock
+            {
+                Text = "Длина лепестка ∝ сила ветра",
+                FontSize = 9,
+                Foreground = Brushes.Gray,
+                Margin = new Thickness(0, 5, 0, 0)
+            });
+        }
+        else
+        {
+            
+            ShowLegendAlternative(new[] { 0.1, 0.5, 1.0, 2.0, 5.0 });
+            return;
+        }
+
+        var border = new Border
+        {
+            BorderBrush = new SolidColorBrush(Colors.Black),
+            BorderThickness = new Thickness(1),
+            Child = legendPanel
+        };
+
+        LegendGrid.Children.Add(border);
+    }
+
+
+    private static List<PointLatLng> FindContourPoints(List<GridPoint> grid, double targetLevel)
     {
         var contourPoints = new List<PointLatLng>();
 
         try
         {
-            // Проверка на null
             if (grid == null || grid.Count == 0)
             {
                 return contourPoints;
             }
 
-            // Простой алгоритм - берем точки, близкие к целевому уровню
-            var closePoints = grid
-                .Where(p => p != null && Math.Abs(p.Concentration - targetLevel) < targetLevel * 0.5)
+            
+            var tolerance = Math.Max(targetLevel * 0.4, 0.01); 
+            var candidatePoints = grid
+                .Where(p => p != null &&
+                       p.Concentration >= targetLevel * 0.7 &&
+                       p.Concentration <= targetLevel * 1.3)
                 .OrderBy(p => Math.Abs(p.Concentration - targetLevel))
-                .Take(100)
+                .Take(200) 
                 .ToList();
 
-            if (closePoints.Count < 3) return contourPoints;
+            if (candidatePoints.Count < 4)
+            {
+                
+                candidatePoints = grid
+                    .Where(p => p != null && p.Concentration > 0)
+                    .OrderBy(p => Math.Abs(p.Concentration - targetLevel))
+                    .Take(50)
+                    .ToList();
+            }
 
-            // Сортируем точки по углу относительно центра
-            var centerLat = closePoints.Average(p => p.Lat);
-            var centerLon = closePoints.Average(p => p.Lon);
+            if (candidatePoints.Count < 3) return contourPoints;
 
-            return closePoints
-                .OrderBy(p => Math.Atan2(p.Lat - centerLat, p.Lon - centerLon))
-                .Select(p => new PointLatLng(p.Lat, p.Lon))
-                .ToList();
+            
+            var centerLat = candidatePoints.Average(p => p.Lat);
+            var centerLon = candidatePoints.Average(p => p.Lon);
+
+            
+            var sectorPoints = new Dictionary<int, GridPoint>();
+
+            foreach (var point in candidatePoints)
+            {
+                
+                double deltaLat = point.Lat - centerLat;
+                double deltaLon = point.Lon - centerLon;
+                double angleRad = Math.Atan2(deltaLon, deltaLat); 
+                double angleDeg = angleRad * 180.0 / Math.PI;
+
+                
+                if (angleDeg < 0) angleDeg += 360;
+
+                
+                int sector = (int)Math.Round(angleDeg / 22.5) % 16;
+
+               
+                if (!sectorPoints.ContainsKey(sector))
+                {
+                    sectorPoints[sector] = point;
+                }
+                else
+                {
+                    var existing = sectorPoints[sector];
+                    double existingDistance = Math.Sqrt(
+                        Math.Pow(existing.Lat - centerLat, 2) +
+                        Math.Pow(existing.Lon - centerLon, 2));
+                    double currentDistance = Math.Sqrt(
+                        Math.Pow(point.Lat - centerLat, 2) +
+                        Math.Pow(point.Lon - centerLon, 2));
+
+                   
+                    if (Math.Abs(point.Concentration - targetLevel) < Math.Abs(existing.Concentration - targetLevel) ||
+                        (Math.Abs(point.Concentration - existing.Concentration) < targetLevel * 0.1 && currentDistance > existingDistance))
+                    {
+                        sectorPoints[sector] = point;
+                    }
+                }
+            }
+            var orderedPoints = new List<PointLatLng>();
+
+            for (int sector = 0; sector < 16; sector++)
+            {
+                if (sectorPoints.ContainsKey(sector))
+                {
+                    var point = sectorPoints[sector];
+                    orderedPoints.Add(new PointLatLng(point.Lat, point.Lon));
+                }
+                else
+                {
+                    var prevPoint = FindNearestSectorPoint(sectorPoints, sector, -1);
+                    var nextPoint = FindNearestSectorPoint(sectorPoints, sector, 1);
+
+                    if (prevPoint != null && nextPoint != null)
+                    {
+                        var interpolated = new PointLatLng(
+                            (prevPoint.Lat + nextPoint.Lat) / 2,
+                            (prevPoint.Lng + nextPoint.Lng) / 2);
+                        orderedPoints.Add(interpolated);
+                    }
+                    else if (prevPoint != null)
+                    {
+                        orderedPoints.Add(prevPoint);
+                    }
+                    else if (nextPoint != null)
+                    {
+                        orderedPoints.Add(nextPoint);
+                    }
+                }
+            }
+            if (orderedPoints.Count > 0 && orderedPoints.Count < 16)
+            {
+                contourPoints = CreateCircularContour(centerLat, centerLon, candidatePoints, targetLevel);
+            }
+            else
+            {
+                contourPoints = orderedPoints;
+            }
+
+            Console.WriteLine($"Создан контур розы ветров: {contourPoints.Count} точек для уровня {targetLevel:F3}");
+            return contourPoints;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Ошибка при поиске контурных точек: {ex.Message}");
+            Console.WriteLine($"Ошибка при создании контура: {ex.Message}");
             return contourPoints;
         }
-    }*/
+    }
+    private static PointLatLng FindNearestSectorPoint(Dictionary<int, GridPoint> sectorPoints, int targetSector, int direction)
+    {
+        for (int i = 1; i < 8; i++)
+        {
+            int checkSector = (targetSector + direction * i + 16) % 16;
+            if (sectorPoints.ContainsKey(checkSector))
+            {
+                var point = sectorPoints[checkSector];
+                return new PointLatLng(point.Lat, point.Lon);
+            }
+        }
+        return default(PointLatLng); 
+    }
 
-    /*private GMapPolygon CreateContourPolygon(List<PointLatLng> points, Color color, double level)
+    private static List<PointLatLng> CreateCircularContour(double centerLat, double centerLon,
+        List<GridPoint> points, double targetLevel)
+    {
+        var contour = new List<PointLatLng>();
+        var relevantPoints = points
+            .Where(p => Math.Abs(p.Concentration - targetLevel) < targetLevel * 0.5)
+            .ToList();
+
+        if (!relevantPoints.Any()) return contour;
+
+        double avgRadius = relevantPoints.Average(p =>
+            Math.Sqrt(Math.Pow(p.Lat - centerLat, 2) + Math.Pow(p.Lon - centerLon, 2)));
+        for (int i = 0; i < 16; i++)
+        {
+            double angle = i * 22.5 * Math.PI / 180.0;
+            double lat = centerLat + avgRadius * Math.Cos(angle);
+            double lon = centerLon + avgRadius * Math.Sin(angle);
+            contour.Add(new PointLatLng(lat, lon));
+        }
+
+        return contour;
+    }
+    public bool HasCalculationData => _concentrationPolygons.Count > 0;
+
+    private void ShowCalculationDataBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (!HasCalculationData || _lastCalculationResults.Count == 0)
+        {
+            MessageBox.Show("Сначала выполните расчет концентраций", "Нет данных",
+                           MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        try
+        {
+         
+            var dialog = new CalculationDataWindow(
+                _lastCalculationResults,
+                _lastUsedMetal,
+                _lastUsedYear,
+                _dbHelper);
+
+            dialog.Owner = this;
+            dialog.ShowDialog();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка",
+                          MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+    private GMapPolygon CreateContourPolygon(List<PointLatLng> points, Color color, double level)
     {
         var polygon = new GMapPolygon(points)
         {
@@ -641,7 +766,7 @@ public partial class MainWindow : Window
         };
 
         return polygon;
-    }*/
+    }
 
     private void ZoomToPollutionArea(List<GridPoint> grid)
     {
@@ -656,7 +781,7 @@ public partial class MainWindow : Window
         MapControl.SetZoomToFitRect(rect);
     }
 
-   /* private void ShowLegendAlternative(double[] levels)
+    private void ShowLegendAlternative(double[] levels)
     {
         LegendGrid.Children.Clear();
 
@@ -668,7 +793,7 @@ public partial class MainWindow : Window
             Opacity = 0.9
         };
 
-        // Заголовок
+  
         legendPanel.Children.Add(new TextBlock
         {
             Text = "Концентрация (мг/м³)",
@@ -676,7 +801,6 @@ public partial class MainWindow : Window
             Margin = new Thickness(0, 0, 0, 5)
         });
 
-        // Элементы
         foreach (var level in levels.OrderByDescending(l => l))
         {
             var stack = new StackPanel { Orientation = Orientation.Horizontal };
@@ -698,7 +822,7 @@ public partial class MainWindow : Window
             legendPanel.Children.Add(stack);
         }
 
-        // Добавляем границу для красоты
+        
         var border = new Border
         {
             BorderBrush = new SolidColorBrush(Colors.Black),
@@ -708,17 +832,16 @@ public partial class MainWindow : Window
 
         LegendGrid.Children.Add(border);
     }
-    */
-   
-    
-    /*private Color GetColorForLevel(double level)
+
+    private Color GetColorForLevel(double level)
     {
-        double ratio = Math.Min(level / 5.0, 1.0);
-        return Color.FromRgb(
-            (byte)(255 * ratio),
-            (byte)(255 * (1 - ratio)),
-            0);
-    }*/
+        
+        if (level < 0.1) return Colors.Green;
+        if (level < 0.5) return Colors.YellowGreen;
+        if (level < 1.0) return Colors.Yellow;
+        if (level < 2.0) return Colors.Orange;
+        return Colors.Red;
+    }
 
     private void ClearConcentrationFields()
     {
@@ -728,7 +851,8 @@ public partial class MainWindow : Window
         }
         _concentrationPolygons.Clear();
 
-        
+        _lastCalculationResults.Clear();
+
         LegendGrid.Children.Clear();
     }
 
@@ -742,15 +866,27 @@ public partial class MainWindow : Window
     {
         try
         {
-            
-            ClearConcentrationFields();
 
-           
+            ClearConcentrationFields();
             LegendGrid.Children.Clear();
         }
         catch (Exception ex)
         {
             MessageBox.Show($"Ошибка при сбросе: {ex.Message}");
+        }
+    }
+    private void ViewAllCalculationResultsButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var resultsWindow = new TESTDIP.View.CalculationResultsWindow();
+            resultsWindow.Owner = this;
+            resultsWindow.ShowDialog();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Ошибка при открытии окна результатов: {ex.Message}", "Ошибка",
+                MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
     private void ExportButton_Click(object sender, RoutedEventArgs e)
@@ -765,15 +901,12 @@ public partial class MainWindow : Window
         {
             try
             {
-                
                 var renderBitmap = new RenderTargetBitmap(
                     (int)MapControl.ActualWidth,
                     (int)MapControl.ActualHeight,
                     96d, 96d, PixelFormats.Pbgra32);
 
                 renderBitmap.Render(MapControl);
-
-                
                 BitmapEncoder encoder;
                 if (saveFileDialog.FilterIndex == 1)
                     encoder = new PngBitmapEncoder();
@@ -782,7 +915,6 @@ public partial class MainWindow : Window
 
                 encoder.Frames.Add(BitmapFrame.Create(renderBitmap));
 
-               
                 using (var fileStream = new FileStream(saveFileDialog.FileName, FileMode.Create))
                 {
                     encoder.Save(fileStream);

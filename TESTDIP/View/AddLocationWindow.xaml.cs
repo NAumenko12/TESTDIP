@@ -12,46 +12,24 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using TESTDIP.Model;
+using TESTDIP.ViewModel;
 
 namespace TESTDIP
 {
     public partial class AddLocationWindow : Window
     {
-        public Location Location { get; private set; }
-
         public AddLocationWindow()
         {
             InitializeComponent();
-        }
-
-        private void SaveButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (!double.TryParse(LatitudeTextBox.Text, out double latitude) ||
-                !double.TryParse(LongitudeTextBox.Text, out double longitude))
+            var viewModel = new AddLocationViewModel();
+            viewModel.RequestClose += (sender, result) =>
             {
-                MessageBox.Show("Введите корректные координаты", "Ошибка",
-                              MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            Location = new Location
-            {
-                Name = NameTextBox.Text,
-                SiteNumber = SiteNumberTextBox.Text,
-                DistanceFromSource = DistanceTextBox.Text,
-                Description = DescriptionTextBox.Text,
-                Latitude = latitude,
-                Longitude = longitude
+                DialogResult = result;
+                Close();
             };
-
-            DialogResult = true;
-            Close();
+            DataContext = viewModel;
         }
 
-        private void CancelButton_Click(object sender, RoutedEventArgs e)
-        {
-            DialogResult = false;
-            Close();
-        }
+        public Location Location => (DataContext as AddLocationViewModel)?.Location;
     }
 }
